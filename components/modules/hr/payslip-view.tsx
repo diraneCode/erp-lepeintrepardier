@@ -43,7 +43,7 @@ export function downloadPayslip(r: PayslipRow, e: Employee) {
       department: department[e.department],
       cnps: e.cnpsNumber,
       hireDate: e.hireDate,
-      bank: e.bankAccount,
+      bank: e.bankAccount ?? "Non renseigné",
     },
     earnings: earnings(r).filter(([, v]) => v > 0),
     deductions: deductions(r).filter(([, v]) => v > 0),

@@ -1,6 +1,6 @@
 import type { Account, ExpenseCategory } from "@/lib/types"
 
-/** Extrait du plan comptable SYSCOHADA révisé utilisé par Isonem. */
+/** Extrait du plan comptable SYSCOHADA révisé utilisé par Le Peintre Pardier. */
 export const ACCOUNTS: Account[] = [
   { code: "101", name: "Capital social", class: 1 },
   { code: "121", name: "Report à nouveau", class: 1 },

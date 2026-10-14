@@ -126,51 +126,30 @@ export function generateSeed(today = new Date()) {
   const locationIds = [...warehouses.map((w) => w.id), ...shopIds]
 
   /* Employés */
-  const roles: [Employee["department"], string, number, string][] = [
-    ["direction", "Directeur général", 1_450_000, "w1"],
-    ["comptabilite", "Responsable administratif et financier", 950_000, "w1"],
-    ["rh", "Responsable RH", 780_000, "w1"],
-    ["commercial", "Directeur commercial", 900_000, "w1"],
-    ["logistique", "Gestionnaire de stock", 420_000, "w1"],
-    ["logistique", "Magasinier", 230_000, "w2"],
-    ["logistique", "Magasinier", 200_000, "w3"],
-    ["boutique", "Responsable de boutique", 380_000, "s1"],
-    ["boutique", "Responsable de boutique", 350_000, "s2"],
-    ["boutique", "Responsable de boutique", 360_000, "s3"],
-    ["boutique", "Responsable de boutique", 340_000, "s4"],
-    ["boutique", "Responsable de boutique", 320_000, "s5"],
-    ["marketing", "Chargée de marketing", 450_000, "w1"],
-    ["comptabilite", "Comptable", 420_000, "w1"],
-    ["boutique", "Caissière", 250_000, "s1"],
-    ["commercial", "Commercial(e)", 280_000, "w1"],
-    ["commercial", "Commercial(e)", 270_000, "w2"],
-    ["commercial", "Commercial(e) grands comptes", 520_000, "w1"],
-    ["technique", "Conseiller coloriste", 300_000, "s1"],
-    ["technique", "Chef de chantier peinture", 380_000, "w1"],
-    ["technique", "Peintre applicateur", 190_000, "w1"],
-    ["technique", "Peintre applicateur", 185_000, "w2"],
-    ["boutique", "Vendeur conseil", 160_000, "s1"],
-    ["boutique", "Caissière", 160_000, "s2"],
-    ["boutique", "Vendeur conseil", 165_000, "s3"],
-    ["boutique", "Caissière", 150_000, "s4"],
-    ["boutique", "Vendeur conseil", 150_000, "s5"],
-    ["logistique", "Magasinier", 140_000, "w1"],
-    ["logistique", "Magasinier", 140_000, "w2"],
-    ["logistique", "Chauffeur livreur", 150_000, "w1"],
-    ["rh", "Assistante RH", 230_000, "w1"],
-    ["marketing", "Community manager", 260_000, "w1"],
+  // [poste, salaire, affectation] — le poste détermine le rôle et le service
+  const CAISSE = "Caissière", STOCK = "Gestionnaire de stock", COM = "Commercial(e)", MAG = "Magasinier"
+  const roles: [string, number, string][] = [
+    ["Directeur général", 1_450_000, "w1"],
+    [COM, 520_000, "w1"], [COM, 300_000, "w2"], [COM, 280_000, "w1"],
+    [STOCK, 420_000, "w1"], [MAG, 230_000, "w2"], [MAG, 200_000, "w3"],
+    [CAISSE, 250_000, "s1"], [CAISSE, 230_000, "s2"], [CAISSE, 240_000, "s3"], [CAISSE, 220_000, "s4"], [CAISSE, 210_000, "s5"],
+    [COM, 300_000, "w1"], [CAISSE, 180_000, "s1"], [CAISSE, 170_000, "s1"],
+    [COM, 280_000, "w1"], [COM, 270_000, "w2"], [COM, 290_000, "w1"], [COM, 260_000, "s1"],
+    [STOCK, 380_000, "w2"], [MAG, 160_000, "w1"], [MAG, 150_000, "w2"],
+    [CAISSE, 170_000, "s2"], [CAISSE, 170_000, "s3"], [COM, 250_000, "s3"], [CAISSE, 160_000, "s4"], [COM, 240_000, "s5"],
+    [MAG, 140_000, "w1"], [MAG, 140_000, "w2"], [MAG, 145_000, "w1"], [COM, 260_000, "w1"], [COM, 250_000, "w1"],
   ]
-  // Rôle applicatif par poste (même ordre que `roles`)
-  const ROLE_BY_INDEX: Role[] = [
-    "super_admin", "comptable", "rh", "directeur_commercial", "gestionnaire_stock", "magasinier", "magasinier",
-    "responsable_boutique", "responsable_boutique", "responsable_boutique", "responsable_boutique", "responsable_boutique",
-    "marketing", "comptable", "caissiere", "commercial", "commercial", "commercial",
-    "vendeur", "employe", "employe", "employe", "vendeur", "caissiere", "vendeur", "caissiere", "vendeur",
-    "magasinier", "magasinier", "employe", "rh", "marketing",
-  ]
+  const POSTE: Record<string, { role: Role; department: Employee["department"] }> = {
+    "Directeur général": { role: "super_admin", department: "direction" },
+    [CAISSE]: { role: "caissiere", department: "boutique" },
+    [STOCK]: { role: "gestionnaire_stock", department: "logistique" },
+    [COM]: { role: "commercial", department: "commercial" },
+    [MAG]: { role: "magasinier", department: "logistique" },
+  }
   const usedNames = new Set<string>(["DiraneMekem"])
-  const employees: Employee[] = roles.map(([dept, position, salary, loc], i) => {
-    const gender: "H" | "F" = /ère|euse|ante|ée|Chargée|Vendeuse|Caissière|Assistante|manager/.test(position) && !/Directeur/.test(position) ? "F" : chance(0.3) ? "F" : "H"
+  const employees: Employee[] = roles.map(([position, salary, loc], i) => {
+    const { role, department: dept } = POSTE[position]
+    const gender: "H" | "F" = position === CAISSE ? "F" : chance(0.35) ? "F" : "H"
     let firstName = "", lastName = ""
     do {
       firstName = pick(gender === "F" ? FIRST_F : FIRST_M)
@@ -185,11 +164,11 @@ export function generateSeed(today = new Date()) {
     const contract = i < 20 ? "cdi" : weighted<Employee["contractType"]>([["cdi", 5], ["cdd", 3], ["stage", 1], ["interim", 1]])
     return {
       id: `e${i + 1}`,
-      matricule: `ISO-${pad(i + 101, 4)}`,
+      matricule: `LPP-${pad(i + 101, 4)}`,
       firstName,
       lastName,
       gender: i === 0 ? "H" : gender,
-      email: `${slug(firstName)}.${slug(lastName)}@isonem.cm`,
+      email: `${slug(firstName)}.${slug(lastName)}@pardier.com`,
       phone: phone(),
       birthDate: iso(randomDate(new Date(1972, 0, 1), new Date(2002, 11, 31))),
       hireDate: iso(hire),
@@ -204,10 +183,10 @@ export function generateSeed(today = new Date()) {
       address: address(loc.startsWith("s3") || loc.startsWith("s4") || loc === "w2" ? "Yaoundé" : loc === "w3" || loc === "s5" ? "Bafoussam" : "Douala"),
       maritalStatus: weighted([["celibataire", 4], ["marie", 5], ["divorce", 1], ["veuf", 0.3]]),
       children: int(0, 5),
-      role: ROLE_BY_INDEX[i] ?? "employe",
+      role,
     }
   })
-  const sellers = employees.filter((e) => ["vendeur", "caissiere", "responsable_boutique", "commercial"].includes(e.role))
+  const sellers = employees.filter((e) => e.role === "caissiere" || e.role === "commercial")
   const commercials = employees.filter((e) => e.department === "commercial" || e.department === "direction")
   const sellerFor = (shopId: string) => {
     const local = sellers.filter((e) => e.locationId === shopId)
@@ -223,6 +202,7 @@ export function generateSeed(today = new Date()) {
     { id: "c5", name: "Outillage", description: "Rouleaux, pinceaux, spatules, pistolets", color: "#dc3b30" },
     { id: "c6", name: "Accessoires & protection", description: "Bâches, rubans, gants, solvants", color: "#8b74e0" },
     { id: "c7", name: "Étanchéité & spéciaux", description: "Anti-rouille, étanchéité, peintures de sol", color: "#1f6f8b" },
+    { id: "c8", name: "Systèmes ISONEM", description: "Mortiers, primaires, résines et revêtements de sol ISONEM", color: "#1e88c9" },
   ]
   const productDefs: [string, string, Product["unit"], number, number][] = [
     ["Acrylique mate blanche Pardier", "c1", "seau_20l", 28_000, 38_500],
@@ -271,6 +251,14 @@ export function generateSeed(today = new Date()) {
     c5: ["L'Outil Parfait", "Nespoli"],
     c6: ["Tesa", "Générique"],
     c7: ["Sika", "Pardier Tech"],
+    c8: ["ISONEM"],
+  }
+  const SPEC: Record<string, string | undefined> = {
+    c1: "Peinture intérieure",
+    c2: "Peinture de façade",
+    c3: "Laque / vernis",
+    c4: "Préparation des supports",
+    c7: "Étanchéité / protection",
   }
   const unitSuffix: Partial<Record<Product["unit"], string>> = { seau_20l: "20 L", pot_4l: "4 L", pot_1l: "1 L", sac_25kg: "25 kg" }
   const products: Product[] = productDefs.map(([name, cat, unit, pp, sp], i) => ({
@@ -291,8 +279,46 @@ export function generateSeed(today = new Date()) {
     ...(chance(0.18) ? { promoPrice: Math.round((sp * pick([0.85, 0.9, 0.95])) / 100) * 100, promoEndDate: iso(addDays(today, int(5, 40))) } : {}),
     supplier: pick(["Pardier Industries", "SoCaPeint", "Colorama Distribution", "Afrique Outillage", "Import Chimie Douala"]),
     description: `${name} — ${categories.find((c) => c.id === cat)?.name.toLowerCase()}.`,
+    // Données techniques utilisées par les proformas (quantité = surface ÷ couverture)
+    specification: SPEC[cat],
+    coverage: ["c1", "c2", "c4", "c7"].includes(cat) ? (unit === "seau_20l" ? int(8, 14) * 10 : unit === "pot_4l" ? int(16, 30) : unit === "pot_1l" ? int(4, 8) : unit === "sac_25kg" ? 30 : undefined) : undefined,
     createdAt: iso(randomDate(new Date(2021, 0, 1), subMonths(today, 6))),
   }))
+  // Gamme ISONEM (tarifs de la proforma de référence)
+  const isonemDefs: [string, string, string, number, number, number][] = [
+    ["ISONEM M35", "Mortier de ciment monocomposant", "20 kg", 25, 36_000, 50_000],
+    ["ISONEM EP PRIMER", "Primaire de revêtement transparent", "5 kg", 15, 82_000, 115_000],
+    ["ISONEM LIQUID GLASS", "Résine époxy transparente étanche", "4 kg", 52, 57_000, 80_000],
+    ["ISONEM SHINE FLOOR", "Revêtement de sol autonivelant (gris, rouge, jaune)", "4,5 kg", 9, 53_000, 75_000],
+    ["Peinture industrielle", "Peinture de sol industrielle", "20 kg", 100, 52_000, 75_000],
+    ["ISONEM THERMAL PAINT", "Peinture isolante thermique", "18 L", 30, 70_000, 98_000],
+  ]
+  isonemDefs.forEach(([name, spec, pack, cov, pp, sp], k) => {
+    products.push({
+      id: `p${products.length + 1}`,
+      sku: `C8-${pad(k + 1, 3)}`,
+      name,
+      categoryId: "c8",
+      brand: "ISONEM",
+      unit: "kg",
+      packaging: pack,
+      specification: spec,
+      coverage: cov,
+      purchasePrice: pp,
+      salePrice: sp,
+      taxRate: 19.25,
+      minStock: int(10, 25),
+      status: "actif",
+      barcode: `869${int(100000000, 999999999)}${int(0, 9)}`,
+      supplier: "ISONEM Paint & Insulation",
+      expiryDate: iso(addDays(today, int(90, 700))),
+      description: `${name} — ${spec}.`,
+      createdAt: iso(randomDate(new Date(2023, 0, 1), subMonths(today, 6))),
+    })
+  })
+  // Diluant : conditionnement libre pour la proforma
+  const diluant = products.find((p) => p.name === "Diluant cellulosique")
+  if (diluant) Object.assign(diluant, { packaging: "10 L", specification: "Pour dilution de la peinture" })
 
   const makeItems = (count: number, bulk = false): LineItem[] => {
     const chosen = new Set<string>()
@@ -424,21 +450,77 @@ export function generateSeed(today = new Date()) {
   }
   sales.sort((a, b) => a.date.localeCompare(b.date))
 
-  /* Devis */
-  const quotes: Quote[] = Array.from({ length: 64 }, (_, i) => {
-    const date = recentDate(start, today)
+  /* Devis au format proforma : projet, surfaces, traitement / main d'œuvre / accessoires */
+  const PROJECTS: [string, string, string, string, string[]][] = [
+    // [projet, désignation de surface, unité, traitement, familles de produits]
+    ["Traitement parking", "Sol parking", "m²", "Marquage", ["ISONEM M35", "ISONEM EP PRIMER", "ISONEM LIQUID GLASS", "ISONEM SHINE FLOOR", "Peinture industrielle", "Diluant cellulosique"]],
+    ["Étanchéité toiture", "Toiture terrasse", "m²", "Étanchéité", ["Résine d'étanchéité", "ISONEM M35", "Hydrofuge"]],
+    ["Ravalement de façade", "Façade principale", "m²", "Peinture façade", ["Sous-couche", "Façade", "Hydrofuge"]],
+    ["Peinture intérieure", "Murs et plafonds", "m²", "Peinture", ["Enduit de lissage", "Sous-couche", "Acrylique", "Vinylique"]],
+    ["Sol époxy atelier", "Sol atelier", "m²", "Revêtement époxy", ["ISONEM EP PRIMER", "Peinture de sol époxy", "ISONEM SHINE FLOOR"]],
+    ["Isolation thermique toiture", "Toiture tôle", "m²", "Isolation", ["ISONEM THERMAL PAINT", "Anti-rouille"]],
+  ]
+  const LABOUR = [
+    ["Préparation de surface", 500],
+    ["Application primaire et résine", 2_500],
+    ["Application revêtement de finition", 2_500],
+    ["Ponçage et rebouchage", 800],
+    ["Application peinture (2 couches)", 1_500],
+    ["Traitement des fissures", 1_200],
+  ] as const
+  const ACCESSORIES = ["Maquette, rouleaux, bandes adhésives", "Bâches de protection et rubans", "Échafaudage (location)", "Transport et manutention", "Pinceaux, spatules et consommables"]
+  const monthSeq = new Map<string, number>()
+  const quoteDates = Array.from({ length: 64 }, () => recentDate(start, today)).sort((a, b) => a.getTime() - b.getTime())
+  const quotes: Quote[] = quoteDates.map((date, i) => {
     const age = (today.getTime() - date.getTime()) / 86_400_000
     const status: Quote["status"] = age > 30 ? weighted([["accepte", 5], ["refuse", 2], ["expire", 2]]) : weighted([["envoye", 4], ["brouillon", 2], ["accepte", 2], ["refuse", 0.5]])
+    const [project, area, unit, treatment, families] = pick(PROJECTS)
+    const client = pick(clients)
+    const surface = round(int(40, 1200), 10)
+    const tax = chance(0.5) ? 19.25 : 0
+    const chosen = families
+      .map((f) => products.find((p) => p.name.startsWith(f) && (p.unit !== "pot_1l")) ?? products.find((p) => p.name.includes(f)))
+      .filter((p, k, arr): p is Product => !!p && arr.indexOf(p) === k)
+    const treatmentLines: LineItem[] = chosen.map((p) => {
+      const cov = p.coverage ?? 0
+      return {
+        productId: p.id,
+        description: p.name,
+        quantity: cov > 0 ? Math.max(1, Math.round(surface / cov)) : int(1, 3),
+        unitPrice: p.salePrice,
+        discount: 0,
+        taxRate: tax,
+        section: "traitement",
+        specification: p.specification,
+        packaging: p.packaging ?? unitSuffix[p.unit] ?? undefined,
+        coverage: cov || undefined,
+        surface,
+      }
+    })
+    const labourLines: LineItem[] = [...LABOUR]
+      .sort(() => rand() - 0.5)
+      .slice(0, int(1, 3))
+      .map(([label, pu]) => ({ productId: "", custom: true, description: label, quantity: surface, unitPrice: pu, discount: 0, taxRate: tax, section: "main_oeuvre" }))
+    const accessoryLines: LineItem[] = chance(0.75)
+      ? [{ productId: "", custom: true, description: pick(ACCESSORIES), quantity: 1, unitPrice: round(int(50_000, 400_000), 10_000), discount: 0, taxRate: tax, section: "accessoires" }]
+      : []
+    const ym = format(date, "yyyy/MM")
+    const seq = (monthSeq.get(ym) ?? 0) + 1
+    monthSeq.set(ym, seq)
     return {
       id: `d${i + 1}`,
-      number: `DEV-${format(date, "yyyy")}-${pad(i + 1, 4)}`,
-      clientId: pick(clients).id,
+      number: `${pad(seq, 2)}/${ym}`,
+      clientId: client.id,
       date: iso(date),
       validUntil: iso(addDays(date, 30)),
-      items: makeItems(int(2, 6), true),
+      items: [...treatmentLines, ...labourLines, ...accessoryLines],
       status,
       ownerId: pick(commercials).id,
-      notes: chance(0.3) ? "Prix valables sous réserve de disponibilité du stock." : undefined,
+      project,
+      site: `${pick(QUARTERS[client.city] ?? ["Centre"]).toUpperCase()} — ${client.city.toUpperCase()}`,
+      issuedIn: "Douala",
+      surfaces: [{ designation: area, quantity: surface, unit, treatment, commercialName: chosen.filter((p) => p.brand === "ISONEM").map((p) => p.name).join(", ") || chosen.map((p) => p.name).slice(0, 2).join(", ") }],
+      notes: chance(0.3) ? "Prix valables 30 jours sous réserve de disponibilité du stock." : undefined,
     }
   })
 
@@ -525,7 +607,7 @@ export function generateSeed(today = new Date()) {
       leads,
       conversions,
       revenue: conversions * int(40_000, 260_000),
-      ownerId: pick(employees.filter((x) => x.department === "marketing")).id,
+      ownerId: pick(employees.filter((x) => x.role === "commercial")).id,
       description: "Campagne multicanal ciblant les clients du segment sélectionné.",
     }
   })
@@ -602,7 +684,7 @@ export function generateSeed(today = new Date()) {
       reason: { annuel: "Congé annuel", maladie: "Arrêt maladie", exceptionnel: pick(["Mariage", "Décès d'un proche", "Naissance"]), recuperation: "Récupération heures supplémentaires", sans_solde: "Convenance personnelle", maternite: "Congé maternité" }[type],
       status,
       requestedAt: iso(requested > today ? today : requested),
-      approverId: status !== "en_attente" ? "e3" : undefined,
+      approverId: status !== "en_attente" ? "e1" : undefined,
       comment: status === "refuse" ? "Période de forte activité, merci de proposer d'autres dates." : undefined,
     }
   }).sort((a, b) => b.startDate.localeCompare(a.startDate))
@@ -661,7 +743,7 @@ export function generateSeed(today = new Date()) {
       locationId: pick(locationIds),
       status,
       submittedBy: pick(employees.slice(0, 15)).id,
-      approvedBy: status === "en_attente" ? undefined : "e2",
+      approvedBy: status === "en_attente" ? undefined : "e1",
       hasReceipt: chance(0.85),
     }
   }).sort((a, b) => a.date.localeCompare(b.date))
@@ -827,7 +909,7 @@ export function generateSeed(today = new Date()) {
     rendez_vous_commercial: "Présentation de l'offre",
     appel_video: "Appel vidéo — devis",
   }
-  const rdvHosts = employees.filter((e) => ["commercial", "vendeur", "responsable_boutique", "marketing", "directeur_commercial"].includes(e.role))
+  const rdvHosts = employees.filter((e) => e.role === "commercial")
   const appointments: Appointment[] = Array.from({ length: 64 }, (_, i) => {
     const type = weighted<Appointment["type"]>([["conseil_couleur", 3], ["visite_chantier", 3], ["rendez_vous_commercial", 3], ["visite_showroom", 2], ["demonstration", 1], ["appel_video", 1]])
     let day = addDays(today, int(-30, 30))
@@ -885,7 +967,7 @@ export function generateSeed(today = new Date()) {
       return {
         id: `ev${i + 1}p${k + 1}`,
         name: audience === "interne" ? `${emp.firstName} ${emp.lastName}` : viaClient ? cl.contactName : `${first} ${last}`,
-        company: audience === "interne" ? "Isonem" : viaClient ? cl.name : chance(0.4) ? `${pick(COMPANY_A)} ${pick(COMPANY_B)}` : undefined,
+        company: audience === "interne" ? "Le Peintre Pardier" : viaClient ? cl.name : chance(0.4) ? `${pick(COMPANY_A)} ${pick(COMPANY_B)}` : undefined,
         phone: phone(),
         email: chance(0.6) ? `${slug(first)}.${slug(last)}@gmail.com` : undefined,
         clientId: viaClient ? cl.id : undefined,
@@ -904,17 +986,17 @@ export function generateSeed(today = new Date()) {
       startTime: type === "salon" ? "09:00" : pick(["08:30", "09:00", "14:00"]),
       endTime: type === "salon" ? "19:00" : pick(["12:30", "17:00", "17:30"]),
       location: type === "salon" ? "Palais des Congrès, Yaoundé" : pick(["Showroom Douala Akwa", "Salle de formation — siège Bassa", "Boutique Yaoundé Mvan", "Hôtel Akwa Palace, Douala"]),
-      trainerId: chance(0.7) ? pick(employees.filter((e) => ["technique", "marketing", "commercial"].includes(e.department))).id : undefined,
+      trainerId: chance(0.7) ? pick(employees.filter((e) => e.role === "commercial")).id : undefined,
       externalSpeaker: chance(0.3) ? pick(["Expert technique Pardier Industries", "Formateur Sika Cameroun", "Architecte d'intérieur invité"]) : undefined,
       capacity,
       budget,
       cost: past ? Math.round(budget * (0.75 + rand() * 0.3)) : Math.round(budget * rand() * 0.4),
       fee: audience === "artisans" && type === "formation" ? 10_000 : 0,
       status: past ? "termine" : count >= capacity ? "complet" : offset < 45 ? "inscriptions" : "planifie",
-      description: `${title}. Programme pratique animé par l'équipe Isonem, avec démonstrations et échanges.`,
+      description: `${title}. Programme pratique animé par l'équipe Le Peintre Pardier, avec démonstrations et échanges.`,
       program: "Accueil · présentation produits · mise en pratique · questions/réponses · remise des attestations",
       participants,
-      ownerId: pick(employees.filter((e) => e.role === "marketing")).id,
+      ownerId: pick(employees.filter((e) => e.role === "commercial")).id,
     }
   })
 

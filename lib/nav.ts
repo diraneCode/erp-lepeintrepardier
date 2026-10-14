@@ -54,7 +54,7 @@ export const NAV: NavGroup[] = [
     items: [
       { title: "Prospects", href: "/commercial/prospects", icon: LuUserSearch, description: "Pistes commerciales à convertir", keywords: "leads pistes", module: "prospects" },
       { title: "Relances", href: "/commercial/relances", icon: LuBellRing, description: "Relances devis, factures et prospects", keywords: "rappels suivi", module: "relances" },
-      { title: "Clients", href: "/commercial/clients", icon: LuUsers, description: "Clients et prospects", keywords: "crm contacts", module: "clients" },
+      { title: "Clients", href: "/commercial/clients", icon: LuUsers, description: "Clients et prospects", keywords: "contacts", module: "clients" },
       { title: "Opportunités", href: "/commercial/opportunites", icon: LuTarget, description: "Pipeline commercial", keywords: "pipeline affaires", module: "opportunites" },
       { title: "Devis", href: "/commercial/devis", icon: LuFileText, description: "Propositions commerciales", keywords: "quotes", module: "devis" },
       { title: "Ventes", href: "/ventes", icon: LuShoppingCart, description: "Ventes et commandes", keywords: "commandes caisse", module: "ventes" },

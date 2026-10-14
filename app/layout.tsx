@@ -18,10 +18,19 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Isonem CRM",
-    template: "%s · Isonem CRM",
+    default: "Le Peintre Pardier ERP",
+    template: "%s · Le Peintre Pardier ERP",
   },
-  description: "CRM et ERP Isonem — ventes, facturation, stock, RH, comptabilité.",
+  description: "ERP Le Peintre Pardier — ventes, facturation, stock, RH, comptabilité.",
+  applicationName: "Le Peintre Pardier ERP",
+  icons: {
+    icon: [
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  manifest: "/site.webmanifest",
 }
 
 export const viewport: Viewport = {

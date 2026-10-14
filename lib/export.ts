@@ -29,10 +29,11 @@ export interface ExportOptions<T> {
 const BRAND: [number, number, number] = [75, 46, 158]
 const MUTED: [number, number, number] = [107, 104, 128]
 const COMPANY = {
-  name: "ISONEM — Le Peintre Pardier",
-  address: "Zone industrielle Bassa, Douala — Cameroun",
-  contact: "+237 233 00 00 00 · contact@isonem.cm",
-  legal: "RCCM : RC/DLA/2019/B/0000 · NIU : M000000000000X",
+  name: "LE PEINTRE PARDIER",
+  address: "BP 4638 Douala — Cameroun",
+  contact: "Tél : 652 385 838 / 698 56 29 59 · sales@pardier.com",
+  legal: "Le Peintre Pardier — peintures, revêtements et étanchéité",
+  footer: "BP: 4638 Douala-Cameroun  -  Tél: 652 385 838 / 698 56 29 59  -  Email: sales@pardier.com",
 }
 
 function stamp() {
@@ -429,4 +430,213 @@ export async function exportPayslipPDF(p: PayslipDocument) {
   doc.text("Barème simplifié (CNPS 4,2 %, IRPP, CAC, CFC, RAV, TDL) — à valider par le service paie.", 14, y + 28)
   drawFooters(doc)
   doc.save(`bulletin-${p.employee.matricule}-${p.period}.pdf`)
+}
+
+/* ---------- Facture proforma (modèle Pardier / ISONEM) ---------- */
+
+export interface ProformaDocument {
+  number: string
+  date: string
+  issuedIn: string
+  project: string
+  site: string
+  client: { name: string; address?: string; phone?: string }
+  surfaces: { designation: string; quantity: number; unit: string; treatment: string; commercialName: string }[]
+  sections: {
+    key: "traitement" | "main_oeuvre" | "accessoires"
+    title: string
+    totalLabel: string
+    lines: { description: string; specification?: string; packaging?: string; coverage?: number; surface?: number; quantity: number; unitPrice: number; amount: number }[]
+    total: number
+  }[]
+  subtotal: number
+  tax: number
+  total: number
+  amountInWords: string
+  validUntil?: string
+  notes?: string
+}
+
+const PF = {
+  blue: [46, 94, 142] as [number, number, number],
+  teal: [30, 78, 95] as [number, number, number],
+  green: [27, 77, 43] as [number, number, number],
+  sky: [159, 220, 243] as [number, number, number],
+  isonem: [30, 136, 201] as [number, number, number],
+  ink: [20, 20, 20] as [number, number, number],
+}
+
+export async function exportProformaPDF(d: ProformaDocument) {
+  const { doc, autoTable, logo } = await createPdf("portrait")
+  const W = doc.internal.pageSize.getWidth()
+  const H = doc.internal.pageSize.getHeight()
+  const M = 12
+  const n = (v?: number) => (v === undefined || !Number.isFinite(v) ? "" : formatNumber(v))
+
+  // En-tête : logo Pardier + marque ISONEM
+  if (logo) doc.addImage(logo, "JPEG", M, 8, 52, 21)
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(30)
+  doc.setTextColor(...PF.isonem)
+  doc.text("ISONEM", W - M - 3, 24, { align: "right" })
+  doc.setFontSize(7)
+  doc.text("®", W - M - 1.5, 15)
+
+  // Bandeau de titre
+  doc.setFillColor(...PF.blue)
+  doc.rect(M, 33, W - 2 * M, 6.5, "F")
+  doc.setTextColor(255, 255, 255)
+  doc.setFontSize(9.5)
+  doc.text(`FACTURE PROFORMA : ${d.number}`, W / 2, 37.4, { align: "center" })
+
+  doc.setFont("helvetica", "normal")
+  doc.setTextColor(...PF.ink)
+  doc.setFontSize(9)
+  doc.text(`${d.issuedIn} : ${formatDate(d.date, "dd-MM-yyyy")}`, W - M - 4, 45, { align: "right" })
+
+  // Projet / Lieu / Doit
+  doc.setFont("helvetica", "bolditalic")
+  doc.text("Projet :", M + 1, 53)
+  const pw = doc.getTextWidth("Projet :")
+  doc.setLineWidth(0.2)
+  doc.line(M + 1, 53.6, M + 1 + pw, 53.6)
+  doc.text(d.project, M + 3 + pw, 53)
+  doc.setFont("helvetica", "bold")
+  doc.text("Lieu", W / 2 + 18, 53)
+  doc.line(W / 2 + 18, 53.6, W / 2 + 18 + doc.getTextWidth("Lieu"), 53.6)
+  doc.setFont("helvetica", "normal")
+  doc.text(`: ${d.site}`, W / 2 + 19 + doc.getTextWidth("Lieu"), 53)
+  doc.text("DOIT :", M + 1, 60)
+  doc.setFont("helvetica", "bold")
+  doc.text(d.client.name, M + 14, 60)
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(8)
+  const contact = [d.client.address, d.client.phone].filter(Boolean).join(" · ")
+  if (contact) doc.text(contact, M + 14, 64.5)
+
+  // Évaluation des surfaces
+  let y = 71
+  doc.setFillColor(...PF.sky)
+  doc.rect(M, y, 70, 5.5, "F")
+  doc.setFont("helvetica", "bold")
+  doc.setFontSize(8.5)
+  doc.text("EVALUATION DES SURFACES A TRAITER", M + 1.5, y + 3.9)
+  y += 9
+  const grid = { lineColor: [0, 0, 0] as [number, number, number], lineWidth: 0.25 }
+  if (d.surfaces.length) {
+    autoTable(doc, {
+      startY: y,
+      margin: { left: M, right: M + 60 },
+      head: [["Désignations", "Quantite", "Unite", "Traitement", "Nom Commercial"]],
+      body: d.surfaces.map((s) => [s.designation, n(s.quantity), s.unit, s.treatment, s.commercialName]),
+      theme: "grid",
+      styles: { font: "helvetica", fontSize: 8, cellPadding: 1.5, textColor: PF.ink, ...grid, valign: "middle" },
+      headStyles: { fillColor: [255, 255, 255], textColor: PF.ink, fontStyle: "bold", halign: "center" },
+      columnStyles: { 0: { halign: "left" }, 1: { halign: "center" }, 2: { halign: "center" }, 3: { halign: "center" }, 4: { halign: "center", fontSize: 7 } },
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    y = ((doc as any).lastAutoTable?.finalY ?? y) + 6
+  }
+
+  // Corps : une ligne d'en-tête commune puis une table par rubrique
+  const widths = [36, 30, 20, 24, 20, 14, 21, 21]
+  const head = [["Produits /Services", "Spécificité", "Conditionnement", "Couverture (par M²)", "Surface", "Qté", "PU", "Montant"]]
+  const columnStyles = Object.fromEntries(widths.map((w, i) => [i, { cellWidth: w, halign: i >= 2 ? (i >= 5 ? "right" : "center") : "left" }]))
+  const bar = (label: string, fill: [number, number, number]) => ({ content: label, colSpan: 8, styles: { fillColor: fill, textColor: 255, fontStyle: "bold" as const, halign: "center" as const } })
+  const totalRow = (label: string, value: number, fill: [number, number, number]) => [
+    { content: "", colSpan: 4, styles: { lineWidth: 0, fillColor: false as unknown as [number, number, number] } },
+    { content: label, colSpan: 3, styles: { fillColor: fill, textColor: 255, fontStyle: "bold" as const, halign: "center" as const } },
+    { content: n(value), styles: { fillColor: fill, textColor: 255, fontStyle: "bold" as const, halign: "right" as const } },
+  ]
+
+  d.sections.forEach((section, si) => {
+    const body: unknown[][] = [[bar(section.title.toUpperCase(), PF.blue)]]
+    for (const l of section.lines) {
+      if (section.key === "traitement")
+        body.push([l.description, l.specification ?? "", l.packaging ?? "", n(l.coverage), n(l.surface), n(l.quantity), n(l.unitPrice), n(l.amount)])
+      else body.push([{ content: l.description, colSpan: 5 }, n(l.quantity), n(l.unitPrice), n(l.amount)])
+    }
+    body.push(totalRow(section.totalLabel.toUpperCase(), section.total, section.key === "accessoires" ? PF.teal : PF.blue))
+    autoTable(doc, {
+      startY: y,
+      margin: { left: M, right: M, bottom: 20 },
+      head: si === 0 ? head : undefined,
+      showHead: si === 0 ? "firstPage" : "never",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      body: body as any,
+      theme: "grid",
+      styles: { font: "helvetica", fontSize: 7.8, cellPadding: 1.5, textColor: PF.ink, ...grid, valign: "middle" },
+      headStyles: { fillColor: [255, 255, 255], textColor: PF.ink, fontStyle: "bold", halign: "center", fontSize: 7.5 },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      columnStyles: columnStyles as any,
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    y = ((doc as any).lastAutoTable?.finalY ?? y) + 5
+  })
+
+  // Totaux généraux
+  const totals: unknown[][] = []
+  if (d.tax > 0) {
+    totals.push(totalRow("TOTAL PROJET HT", d.subtotal, PF.blue))
+    totals.push(totalRow("TVA 19,25 %", d.tax, PF.blue))
+    totals.push(totalRow("TOTAL PROJET TTC", d.total, PF.green))
+  } else totals.push(totalRow("TOTAL PROJET", d.total, PF.green))
+  autoTable(doc, {
+    startY: y,
+    margin: { left: M, right: M, bottom: 20 },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    body: totals as any,
+    theme: "grid",
+    styles: { font: "helvetica", fontSize: 8.5, cellPadding: 1.6, ...grid },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    columnStyles: columnStyles as any,
+  })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  y = ((doc as any).lastAutoTable?.finalY ?? y) + 8
+  if (y > H - 60) {
+    doc.addPage()
+    y = 20
+  }
+
+  doc.setFont("helvetica", "bolditalic")
+  doc.setFontSize(9)
+  doc.setTextColor(...PF.ink)
+  doc.text(doc.splitTextToSize(`Arrêté la présente facture proforma à la somme de ${d.amountInWords}`, W - 2 * M), M, y)
+  y += 8
+  doc.setFont("helvetica", "normal")
+  doc.setFontSize(7.5)
+  doc.setTextColor(90, 90, 90)
+  const conditions = [d.validUntil ? `Offre valable jusqu'au ${formatDate(d.validUntil)}.` : "", d.notes ?? ""].filter(Boolean).join(" ")
+  if (conditions) {
+    doc.text(doc.splitTextToSize(conditions, W - 2 * M), M, y)
+    y += 6
+  }
+
+  // Signatures
+  y = Math.max(y + 12, H - 62)
+  doc.setFont("helvetica", "bolditalic")
+  doc.setFontSize(9)
+  doc.setTextColor(...PF.ink)
+  doc.text("LA DIRECTION", M + 14, y)
+  doc.line(M + 14, y + 0.7, M + 14 + doc.getTextWidth("LA DIRECTION"), y + 0.7)
+  doc.setFont("helvetica", "bold")
+  doc.text("LE CLIENT", W / 2 + 20, y)
+  doc.line(W / 2 + 20, y + 0.7, W / 2 + 20 + doc.getTextWidth("LE CLIENT"), y + 0.7)
+
+  // Pied de page sur chaque page
+  const pages = doc.getNumberOfPages()
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i)
+    doc.setFillColor(...PF.blue)
+    doc.rect(M, H - 16, W - 2 * M, 5.5, "F")
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(7.5)
+    doc.setTextColor(255, 255, 255)
+    doc.text(COMPANY.footer, W / 2, H - 12.3, { align: "center" })
+    if (pages > 1) {
+      doc.setTextColor(120, 120, 120)
+      doc.text(`Page ${i} / ${pages}`, W - M, H - 6, { align: "right" })
+    }
+  }
+  doc.save(`proforma-${d.number.replace(/\//g, "-")}.pdf`)
 }

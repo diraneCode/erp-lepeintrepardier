@@ -1,6 +1,6 @@
-# Isonem CRM
+# Le Peintre Pardier ERP
 
-Frontend du CRM/ERP d'Isonem (Le Peintre Pardier) — Next.js 16, React 19, Tailwind CSS 4, shadcn/ui.
+Frontend de l'ERP Le Peintre Pardier — Next.js 16, React 19, Tailwind CSS 4, shadcn/ui.
 
 ## Démarrer
 
@@ -10,7 +10,7 @@ pnpm dev      # http://localhost:3000
 pnpm build && pnpm start
 ```
 
-Connexion : choisissez un compte de démonstration sur `/login` (mot de passe `Isonem@2026`).
+Connexion : choisissez un compte de démonstration sur `/login` (mot de passe `Pardier@2026`).
 
 Les données sont générées au premier lancement (jeu de démonstration camerounais) et
 conservées dans le `localStorage` du navigateur. Réinitialisation : *Mon compte → Préférences*.
@@ -35,9 +35,9 @@ conservées dans le `localStorage` du navigateur. Réinitialisation : *Mon compt
 (`all` : toute l'entreprise · `shop` : son site d'affectation · `own` : ses propres données) et le
 droit d'écriture. `hooks/use-access.ts` fournit l'utilisateur connecté et les données filtrées
 (`useScopedData`). Les filtres par personne (commercial, vendeur, responsable…) ne sont proposés
-qu'aux profils à portée globale. Rôles : super administrateur, directeur commercial, commercial,
-responsable de boutique, caissière, vendeur, gestionnaire de stock, magasinier, comptable, RH,
-marketing, employé. Le poste choisi dans la fiche employé propose le rôle correspondant (`POSITIONS` dans `lib/labels.ts`).
+qu'aux profils à portée globale. Postes (= rôles) : caissière, gestionnaire de stock, commercial(e),
+magasinier, plus le super administrateur. Tout employé peut créer prospects et clients.
+Les pièces des employés (photo, CNI, CV, plan, diplôme) sont stockées dans IndexedDB (`lib/files.ts`).
 
 ## Architecture
 

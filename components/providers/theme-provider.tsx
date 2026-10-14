@@ -2,8 +2,10 @@
 
 import * as React from "react"
 
+import "@/lib/validation"
+
 export type Theme = "light" | "dark" | "system"
-export const THEME_STORAGE_KEY = "isonem-theme"
+export const THEME_STORAGE_KEY = "pardier-theme"
 
 /** Script exécuté dans <head> avant le premier rendu pour éviter le flash de thème. */
 export const themeScript = `(function(){try{var t=localStorage.getItem("${THEME_STORAGE_KEY}")||"system";var d=t==="dark"||(t==="system"&&window.matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);document.documentElement.style.colorScheme=d?"dark":"light"}catch(e){}})()`

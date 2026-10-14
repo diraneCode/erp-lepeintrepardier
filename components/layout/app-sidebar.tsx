@@ -101,7 +101,7 @@ export function AppSidebar() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent">
-                  <UserAvatar name={fullName} className="size-8 rounded-lg" />
+                  <UserAvatar name={fullName} className="size-8 rounded-lg" photoId={user?.documents?.photo?.id} />
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{fullName}</span>
                     <span className="truncate text-xs text-muted-foreground">{roleLabel}</span>

@@ -3,6 +3,7 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { addDays } from "date-fns"
 import {
   LuCircleCheck,
   LuCopy,
@@ -30,17 +31,18 @@ import { StatCard, StatGrid } from "@/components/shared/stat-card"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { UrlActions } from "@/components/shared/url-actions"
 import { QuoteFormDialog } from "@/components/modules/commercial/quote-form"
-import { DocumentLines, toDocumentClient, toDocumentLines } from "@/components/modules/commercial/document-lines"
+import { ProformaView, toProformaDocument } from "@/components/modules/commercial/proforma-view"
 import { useFilters, type FilterConfig } from "@/hooks/use-filters"
 import { useLookups } from "@/hooks/use-lookups"
 import { useAccess, useModuleAccess, useScopedData } from "@/hooks/use-access"
 import { FollowupFormDialog, type FollowupPreset } from "@/components/modules/prospects/followup-forms"
 import { useTransientState } from "@/hooks/use-transient-state"
 import { documentTotals } from "@/lib/calc"
-import { exportDocumentPDF } from "@/lib/export"
+import { exportProformaPDF } from "@/lib/export"
+import { nextProformaNumber } from "@/lib/proforma"
 import { formatDate, formatMoney, formatNumber, formatPercent, toISODate } from "@/lib/format"
 import { quoteStatus, toOptions } from "@/lib/labels"
-import { nextNumber, uid, useStore } from "@/lib/store"
+import { uid, useStore } from "@/lib/store"
 import type { Quote } from "@/lib/types"
 
 type Row = Quote & { total: number; expired: boolean }
@@ -53,7 +55,7 @@ export default function QuotesPage() {
   const add = useStore((s) => s.add)
   const remove = useStore((s) => s.remove)
   const convert = useStore((s) => s.convertQuoteToInvoice)
-  const { clientName, clientById, employeeName, employeeOptions, clientOptions } = useLookups()
+  const { clientName, clientById, employeeName, employeeOptions, clientOptions, productById } = useLookups()
 
   const [formOpen, setFormOpen] = useTransientState(false)
   const [editing, setEditing] = useTransientState<Quote | undefined>(undefined)
@@ -75,7 +77,7 @@ export default function QuotesPage() {
 
   const config = React.useMemo<FilterConfig<Row>>(
     () => ({
-      search: { placeholder: "N° devis, client, produit…", fields: (q) => [q.number, clientById.get(q.clientId)?.name, ...q.items.map((i) => i.description)] },
+      search: { placeholder: "N° proforma, client, projet, lieu, produit…", fields: (q) => [q.number, clientById.get(q.clientId)?.name, q.project, q.site, ...q.items.map((i) => i.description)] },
       date: { label: "Date du devis", accessor: (q) => q.date },
       facets: [
         { id: "status", label: "Statut", options: toOptions(quoteStatus), accessor: (q) => q.status },
@@ -109,23 +111,11 @@ export default function QuotesPage() {
   }
 
   const downloadPdf = (q: Quote) =>
-    exportDocumentPDF({
-      kind: "DEVIS",
-      number: q.number,
-      date: q.date,
-      dueDate: q.validUntil,
-      dueLabel: "Valable jusqu'au",
-      status: quoteStatus[q.status].label,
-      client: toDocumentClient(clientById.get(q.clientId)),
-      issuer: employeeName(q.ownerId),
-      lines: toDocumentLines(q.items),
-      totals: documentTotals(q.items),
-      notes: q.notes,
-    }).then(() => toast.success("PDF généré", { description: q.number }))
+    exportProformaPDF(toProformaDocument(q, clientById.get(q.clientId), productById)).then(() => toast.success("Proforma PDF générée", { description: `N° ${q.number}` }))
 
   const duplicate = (q: Quote) => {
-    const number = nextNumber("DEV", useStore.getState().quotes, 4)
-    add("quotes", { ...q, id: uid("d"), number, status: "brouillon", date: today, invoiceId: undefined })
+    const number = nextProformaNumber(useStore.getState().quotes)
+    add("quotes", { ...q, id: uid("d"), number, status: "brouillon", date: today, validUntil: toISODate(addDays(new Date(), 30)), invoiceId: undefined })
     toast.success("Devis dupliqué", { description: number })
   }
 
@@ -141,7 +131,8 @@ export default function QuotesPage() {
   }
 
   const columns: Column<Row>[] = [
-    { id: "number", header: "N° devis", accessor: (q) => q.number, cell: (q) => <span className="font-medium">{q.number}</span> },
+    { id: "number", header: "N° proforma", accessor: (q) => q.number, cell: (q) => <span className="font-medium">{q.number}</span> },
+    { id: "project", header: "Projet", accessor: (q) => q.project ?? "", cell: (q) => <div className="min-w-0"><div className="truncate">{q.project ?? "—"}</div><div className="truncate text-xs text-muted-foreground">{q.site}</div></div>, className: "max-w-[220px]", hideOnMobile: true },
     { id: "client", header: "Client", accessor: (q) => clientName(q.clientId), className: "max-w-[220px] truncate" },
     { id: "date", header: "Date", accessor: (q) => q.date, cell: (q) => formatDate(q.date), exportType: "date" },
     {
@@ -154,7 +145,7 @@ export default function QuotesPage() {
     },
     { id: "lines", header: "Lignes", accessor: (q) => q.items.length, align: "right", exportType: "number", hideOnMobile: true, defaultHidden: true },
     { id: "owner", header: "Commercial", accessor: (q) => employeeName(q.ownerId), hideOnMobile: true, defaultHidden: !acc.global },
-    { id: "total", header: "Montant TTC", accessor: (q) => q.total, cell: (q) => formatMoney(q.total), align: "right", exportType: "money", footer: (r) => formatMoney(r.reduce((s, q) => s + q.total, 0)) },
+    { id: "total", header: "Total projet", accessor: (q) => q.total, cell: (q) => formatMoney(q.total), align: "right", exportType: "money", footer: (r) => formatMoney(r.reduce((s, q) => s + q.total, 0)) },
     {
       id: "status",
       header: "Statut",
@@ -173,12 +164,12 @@ export default function QuotesPage() {
       <UrlActions onNew={() => acc.write && openEdit()} onQuery={filters.setSearch} />
       <PageHeader
         icon={LuFileText}
-        title="Devis"
-        description="Propositions commerciales, relances et transformation en factures."
+        title="Devis & proformas"
+        description="Factures proforma par projet : évaluation des surfaces, traitement, main d'œuvre, accessoires."
         actions={
           acc.write && (
             <Button onClick={() => openEdit()}>
-              <LuPlus /> Nouveau devis
+              <LuPlus /> Nouvelle proforma
             </Button>
           )
         }
@@ -286,8 +277,8 @@ export default function QuotesPage() {
                 ]}
               />
             </DetailSection>
-            <DetailSection title="Lignes du devis">
-              <DocumentLines items={viewing.items} />
+            <DetailSection title="Proforma">
+              <ProformaView doc={toProformaDocument(viewing, clientById.get(viewing.clientId), productById)} />
             </DetailSection>
           </div>
         )}

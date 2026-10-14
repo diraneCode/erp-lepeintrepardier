@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 export function Logo({ className }: { className?: string }) {
   return (
     <div className={cn("overflow-hidden rounded-md bg-white", className)}>
-      <Image src="/logo.jpg" alt="Isonem — Le Peintre Pardier" width={720} height={290} loading="eager" className="h-full w-auto object-contain" />
+      <Image src="/logo.jpg" alt="Le Peintre Pardier" width={720} height={290} loading="eager" className="h-full w-auto object-contain" />
     </div>
   )
 }

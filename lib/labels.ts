@@ -353,25 +353,10 @@ export const participantStatus: LabelMap<ParticipantStatus> = {
 
 /* ---------- Postes ---------- */
 
-/** Postes proposés dans la fiche employé, avec le rôle d'accès suggéré. */
+/** Postes disponibles : le poste détermine directement le rôle d'accès et le service. */
 export const POSITIONS: { label: string; department: import("@/lib/types").Department; role: import("@/lib/access").Role }[] = [
-  { label: "Directeur général", department: "direction", role: "super_admin" },
-  { label: "Responsable administratif et financier", department: "comptabilite", role: "comptable" },
-  { label: "Comptable", department: "comptabilite", role: "comptable" },
-  { label: "Responsable RH", department: "rh", role: "rh" },
-  { label: "Assistante RH", department: "rh", role: "rh" },
-  { label: "Directeur commercial", department: "commercial", role: "directeur_commercial" },
-  { label: "Commercial(e)", department: "commercial", role: "commercial" },
-  { label: "Commercial(e) grands comptes", department: "commercial", role: "commercial" },
-  { label: "Responsable de boutique", department: "boutique", role: "responsable_boutique" },
   { label: "Caissière", department: "boutique", role: "caissiere" },
-  { label: "Vendeur conseil", department: "boutique", role: "vendeur" },
   { label: "Gestionnaire de stock", department: "logistique", role: "gestionnaire_stock" },
+  { label: "Commercial(e)", department: "commercial", role: "commercial" },
   { label: "Magasinier", department: "logistique", role: "magasinier" },
-  { label: "Chauffeur livreur", department: "logistique", role: "employe" },
-  { label: "Chargée de marketing", department: "marketing", role: "marketing" },
-  { label: "Community manager", department: "marketing", role: "marketing" },
-  { label: "Conseiller coloriste", department: "technique", role: "vendeur" },
-  { label: "Chef de chantier peinture", department: "technique", role: "employe" },
-  { label: "Peintre applicateur", department: "technique", role: "employe" },
 ]

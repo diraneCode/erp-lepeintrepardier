@@ -316,7 +316,9 @@ export const useStore = create<AppState>()(
         createSale: (sale, opts) => {
           set({ sales: [sale, ...get().sales] })
           if (sale.status !== "brouillon" && sale.status !== "annulee") {
-            const movements: StockMovement[] = sale.items.map((item) => ({
+            // Seules les lignes d'articles du catalogue impactent le stock
+            const stocked = sale.items.filter((i) => !!i.productId)
+            const movements: StockMovement[] = stocked.map((item) => ({
               id: uid("m"),
               date: nowStamp(),
               productId: item.productId,
@@ -328,7 +330,7 @@ export const useStore = create<AppState>()(
               userId: sale.sellerId,
             }))
             set({ stockMovements: [...get().stockMovements, ...movements] })
-            sale.items.forEach((item) => adjustStock(item.productId, sale.boutiqueId, -item.quantity))
+            stocked.forEach((item) => adjustStock(item.productId, sale.boutiqueId, -item.quantity))
           }
           if (opts?.createInvoice && sale.clientId && sale.status !== "brouillon") {
             const paidNow = sale.paymentMethod !== "credit"
@@ -365,11 +367,12 @@ export const useStore = create<AppState>()(
           const sale = get().sales.find((s) => s.id === id)
           if (!sale || sale.status === "annulee") return
           if (sale.status !== "brouillon") {
-            sale.items.forEach((item) => adjustStock(item.productId, sale.boutiqueId, item.quantity))
+            const stocked = sale.items.filter((i) => !!i.productId)
+            stocked.forEach((item) => adjustStock(item.productId, sale.boutiqueId, item.quantity))
             set({
               stockMovements: [
                 ...get().stockMovements,
-                ...sale.items.map<StockMovement>((item) => ({
+                ...stocked.map<StockMovement>((item) => ({
                   id: uid("m"),
                   date: nowStamp(),
                   productId: item.productId,
@@ -522,8 +525,8 @@ export const useStore = create<AppState>()(
       }
     },
     {
-      name: "isonem-data",
-      version: 4,
+      name: "pardier-data",
+      version: 6,
       // Nouveau modèle (rôles, comptes, objectifs) : on régénère le jeu de démonstration
       migrate: () => ({}) as AppState,
       storage: createJSONStorage(() => safeStorage),

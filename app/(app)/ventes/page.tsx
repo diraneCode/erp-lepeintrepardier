@@ -129,11 +129,15 @@ export default function SalesPage() {
   }, [valid, shopName, acc.global])
   const topProducts = React.useMemo(() => {
     const m = new Map<string, number>()
-    valid.forEach((s) => s.items.forEach((i) => m.set(i.productId, (m.get(i.productId) ?? 0) + i.quantity * i.unitPrice * (1 - i.discount / 100))))
+    // Lignes libres regroupées par désignation
+    valid.forEach((s) => s.items.forEach((i) => {
+      const key = i.productId || `libre:${i.description}`
+      m.set(key, (m.get(key) ?? 0) + i.quantity * i.unitPrice * (1 - i.discount / 100))
+    }))
     return [...m]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
-      .map(([id, value]) => ({ label: productById.get(id)?.name ?? "—", value }))
+      .map(([id, value]) => ({ label: id.startsWith("libre:") ? `${id.slice(6)} (ligne libre)` : productById.get(id)?.name ?? "—", value }))
   }, [valid, productById])
 
   const downloadTicket = (s: Row) =>

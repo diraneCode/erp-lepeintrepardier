@@ -3,7 +3,9 @@
 import * as React from "react"
 import { useFieldArray, useWatch, Controller, type Control, type FieldValues, type UseFormSetValue } from "react-hook-form"
 import { z } from "zod"
-import { LuPlus, LuTrash2, LuTriangleAlert } from "react-icons/lu"
+
+import { optionalNumber } from "@/lib/validation"
+import { LuPackage, LuPenLine, LuTrash2, LuTriangleAlert } from "react-icons/lu"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,18 +18,30 @@ import { formatMoney } from "@/lib/format"
 import type { LineItem } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-export const lineItemSchema = z.object({
-  productId: z.string().min(1, "Choisissez un produit"),
-  description: z.string(),
-  quantity: z.number({ error: "Quantité requise" }).positive("Quantité > 0"),
-  unitPrice: z.number({ error: "Prix requis" }).min(0, "Prix invalide"),
-  discount: z.number({ error: "Remise requise" }).min(0).max(100, "Max 100 %"),
-  taxRate: z.number().min(0).max(100),
-})
+export const lineItemSchema = z
+  .object({
+    productId: z.string(),
+    custom: z.boolean().optional(),
+    description: z.string(),
+    quantity: z.number({ error: "Quantité requise" }).positive("Quantité > 0"),
+    unitPrice: z.number({ error: "Prix requis" }).min(0, "Prix invalide"),
+    discount: z.number({ error: "Remise requise" }).min(0).max(100, "Max 100 %"),
+    taxRate: z.number().min(0).max(100),
+    section: z.enum(["traitement", "main_oeuvre", "accessoires"]).optional(),
+    specification: z.string().optional(),
+    packaging: z.string().optional(),
+    coverage: optionalNumber(),
+    surface: optionalNumber(),
+  })
+  // Ligne d'article : produit obligatoire. Ligne libre : désignation obligatoire.
+  .refine((l) => l.custom || !!l.productId, { path: ["productId"], message: "Choisissez un produit" })
+  .refine((l) => !l.custom || l.description.trim().length >= 2, { path: ["description"], message: "Désignation requise" })
 
 export const lineItemsSchema = z.array(lineItemSchema).min(1, "Ajoutez au moins une ligne")
 
 export const emptyLine: LineItem = { productId: "", description: "", quantity: 1, unitPrice: 0, discount: 0, taxRate: 19.25 }
+/** Ligne sans article du catalogue (service, accessoire, prestation…) */
+export const emptyCustomLine: LineItem = { ...emptyLine, custom: true }
 
 type ItemsForm = { items: LineItem[] }
 
@@ -76,6 +90,18 @@ export function LineItemsEditor<T extends FieldValues>({
             className="grid grid-cols-2 items-start gap-2 rounded-lg border p-3 md:grid-cols-[minmax(0,1fr)_80px_120px_80px_120px_36px] md:border-0 md:p-0"
           >
             <div className="col-span-2 flex flex-col gap-1 md:col-span-1">
+              {item.custom ? (
+                <Controller
+                  control={ctrl}
+                  name={`items.${index}.description`}
+                  render={({ field, fieldState }) => (
+                    <div className="relative">
+                      <Input {...field} placeholder="Désignation (service, prestation, accessoire…)" aria-label="Désignation" aria-invalid={fieldState.invalid} className="pr-20" />
+                      <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Libre</span>
+                    </div>
+                  )}
+                />
+              ) : (
               <Controller
                 control={ctrl}
                 name={`items.${index}.productId`}
@@ -97,6 +123,7 @@ export function LineItemsEditor<T extends FieldValues>({
                   />
                 )}
               />
+              )}
               {item.productId && productById.get(item.productId) && hasActivePromo(productById.get(item.productId)!) && (
                 <span className="text-xs font-medium text-success">
                   Prix promo appliqué (au lieu de {formatMoney(productById.get(item.productId)!.salePrice)})
@@ -179,9 +206,14 @@ export function LineItemsEditor<T extends FieldValues>({
       })}
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <Button type="button" variant="outline" size="sm" onClick={() => append({ ...emptyLine })}>
-          <LuPlus /> Ajouter une ligne
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => append({ ...emptyLine })}>
+            <LuPackage /> Ajouter un article
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => append({ ...emptyCustomLine })}>
+            <LuPenLine /> Ligne libre
+          </Button>
+        </div>
         <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg bg-muted/60 p-3 text-sm sm:w-72">
           <dt className="text-muted-foreground">Total brut HT</dt>
           <dd className="text-right tabular">{formatMoney(totals.gross)}</dd>

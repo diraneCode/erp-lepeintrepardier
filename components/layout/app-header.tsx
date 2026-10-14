@@ -136,7 +136,7 @@ export function AppHeader() {
             </>
           )}
           <BreadcrumbItem className="min-w-0">
-            <BreadcrumbPage className="truncate">{item?.title ?? "Isonem"}</BreadcrumbPage>
+            <BreadcrumbPage className="truncate">{item?.title ?? "Le Peintre Pardier"}</BreadcrumbPage>
           </BreadcrumbItem>
         </BreadcrumbList>
       </Breadcrumb>

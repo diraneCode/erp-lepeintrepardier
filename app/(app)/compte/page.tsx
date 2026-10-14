@@ -57,7 +57,7 @@ export default function AccountPage() {
       <PageHeader icon={LuUserCog} title="Mon compte" description="Consultez vos informations et gérez votre mot de passe." />
       <Card>
         <CardContent className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
-          <UserAvatar name={fullName} className="size-16 text-lg" />
+          <UserAvatar name={fullName} className="size-16 text-lg" photoId={user.documents?.photo?.id} />
           <div className="min-w-0 flex-1">
             <div className="text-lg font-semibold">{fullName}</div>
             <div className="text-sm text-muted-foreground">
@@ -112,7 +112,7 @@ function InfoTab() {
               { label: "Nom complet", value: `${user.firstName} ${user.lastName}` },
               { label: "Matricule", value: user.matricule },
               { label: "Date de naissance", value: formatDate(user.birthDate) },
-              { label: "Situation familiale", value: `${maritalStatus[user.maritalStatus]} · ${user.children} enfant(s)` },
+              { label: "Situation familiale", value: `${maritalStatus[user.maritalStatus]}${user.children !== undefined ? ` · ${user.children} enfant(s) à charge` : ""}` },
               { label: "E-mail professionnel", value: user.email },
               { label: "Téléphone", value: user.phone },
               { label: "Adresse", value: user.address, full: true },
@@ -134,7 +134,8 @@ function InfoTab() {
               { label: "Date d'embauche", value: formatDate(user.hireDate) },
               { label: "Statut", value: <StatusBadge def={employeeStatus[user.status]} /> },
               { label: "N° CNPS", value: user.cnpsNumber },
-              { label: "Compte bancaire", value: <span className="font-mono text-xs">{user.bankAccount}</span> },
+              { label: "Compte bancaire", value: user.bankAccount ? <span className="font-mono text-xs">{user.bankAccount}</span> : "Non renseigné" },
+              { label: "Contact d'urgence", value: user.emergencyContact ? `${user.emergencyContact.name} (${user.emergencyContact.relation}) · ${user.emergencyContact.phone}` : "Non renseigné", full: true },
             ]}
           />
         </CardContent>

@@ -113,7 +113,7 @@ function CatalogTab({ onEdit, onNew }: { onEdit?: (p: Product) => void; onNew: (
       if (l.quantity <= (minOf.get(l.productId) ?? 0)) below.set(l.productId, true)
     })
     const sold = new Map<string, number>()
-    sales.forEach((s) => s.status !== "annulee" && s.items.forEach((i) => sold.set(i.productId, (sold.get(i.productId) ?? 0) + i.quantity)))
+    sales.forEach((s) => s.status !== "annulee" && s.items.forEach((i) => i.productId && sold.set(i.productId, (sold.get(i.productId) ?? 0) + i.quantity)))
     return products.map((p) => {
       const qty = stock.get(p.id) ?? 0
       const margin = p.salePrice - p.purchasePrice

@@ -125,7 +125,7 @@ function Dashboard() {
     const map = new Map<string, number>()
     m.cur.forEach((s) =>
       s.items.forEach((i) => {
-        const cat = categoryById.get(productById.get(i.productId)?.categoryId ?? "")?.name ?? "Autres"
+        const cat = i.productId ? categoryById.get(productById.get(i.productId)?.categoryId ?? "")?.name ?? "Autres" : "Services & lignes libres"
         map.set(cat, (map.get(cat) ?? 0) + i.quantity * i.unitPrice * (1 - i.discount / 100))
       })
     )
@@ -148,7 +148,7 @@ function Dashboard() {
       <PageHeader
         icon={LuLayoutDashboard}
         title={`${hour < 18 ? "Bonjour" : "Bonsoir"} ${user?.firstName ?? ""}`}
-        description={`${global ? "Vue d'ensemble de l'activité Isonem" : "Vos indicateurs"} · ${describeRange(range).toLowerCase()}`}
+        description={`${global ? "Vue d'ensemble de l'activité Le Peintre Pardier" : "Vos indicateurs"} · ${describeRange(range).toLowerCase()}`}
         actions={
           <>
             <DateRangePicker value={range} preset={preset} onChange={(r, p) => { setRange(r); setPreset(p) }} align="end" />

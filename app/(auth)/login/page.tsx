@@ -22,7 +22,7 @@ const schema = z.object({
   password: z.string().min(6, "6 caractères minimum"),
 })
 
-const DEMO_ROLES: Role[] = ["super_admin", "directeur_commercial", "commercial", "responsable_boutique", "caissiere", "vendeur", "gestionnaire_stock", "magasinier", "comptable", "rh", "marketing", "employe"]
+const DEMO_ROLES: Role[] = ["super_admin", "caissiere", "gestionnaire_stock", "commercial", "magasinier"]
 
 export default function LoginPage() {
   const router = useRouter()
@@ -62,7 +62,7 @@ export default function LoginPage() {
           <Logo className="h-14 self-start" />
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Connexion</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Accédez à votre espace Isonem avec votre adresse professionnelle.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Accédez à votre espace Le Peintre Pardier avec votre adresse professionnelle.</p>
           </div>
           <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
             <TextField control={form.control} name="email" label="E-mail professionnel" type="email" autoComplete="email" required />
@@ -109,7 +109,7 @@ export default function LoginPage() {
         </motion.div>
       </div>
       <div className="hidden flex-col justify-between bg-primary p-12 text-primary-foreground lg:flex">
-        <span className="text-sm font-medium opacity-80">ISONEM · Le Peintre Pardier</span>
+        <span className="text-sm font-medium opacity-80">LE PEINTRE PARDIER · ERP</span>
         <div className="flex flex-col gap-4">
           <p className="max-w-md text-3xl leading-tight font-semibold">Ventes, stock, facturation, RH et comptabilité réunis dans un seul outil.</p>
           <div className="flex gap-2">
@@ -118,7 +118,7 @@ export default function LoginPage() {
             ))}
           </div>
         </div>
-        <span className="text-xs opacity-70">© Isonem — Douala, Cameroun</span>
+        <span className="text-xs opacity-70">© Le Peintre Pardier — Douala, Cameroun</span>
       </div>
     </div>
   )

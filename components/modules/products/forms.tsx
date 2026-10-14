@@ -4,6 +4,8 @@ import * as React from "react"
 import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
+
+import { optionalNumber } from "@/lib/validation"
 import { toast } from "sonner"
 
 import { DateField, NumberField, SelectField, SwitchField, TextareaField, TextField } from "@/components/forms/fields"
@@ -28,8 +30,11 @@ const productSchema = z
     status: z.enum(["actif", "inactif"]),
     barcode: z.union([z.literal(""), z.string().trim().regex(/^\d{8,14}$/, "Code-barres EAN invalide (8 à 14 chiffres)")]),
     supplier: z.string().trim().min(2, "Fournisseur requis"),
+    specification: z.string().optional(),
+    packaging: z.string().optional(),
+    coverage: optionalNumber(),
     hasPromo: z.boolean(),
-    promoPrice: z.number().optional(),
+    promoPrice: optionalNumber(),
     promoEndDate: z.string().optional(),
     expiryDate: z.string().optional(),
     description: z.string().optional(),
@@ -58,6 +63,9 @@ const productDefaults = (p?: Product): ProductValues => ({
   status: p?.status ?? "actif",
   barcode: p?.barcode ?? "",
   supplier: p?.supplier ?? "",
+  specification: p?.specification ?? "",
+  packaging: p?.packaging ?? "",
+  coverage: p?.coverage ?? Number.NaN,
   hasPromo: p?.promoPrice !== undefined,
   promoPrice: p?.promoPrice ?? Number.NaN,
   promoEndDate: p?.promoEndDate ?? "",
@@ -81,9 +89,12 @@ export function ProductFormDialog({ open, onOpenChange, product }: { open: boole
       form.setError("sku", { message: "Cette référence existe déjà" })
       return
     }
-    const { hasPromo, promoPrice, promoEndDate, expiryDate, barcode, ...rest } = v
+    const { hasPromo, promoPrice, promoEndDate, expiryDate, barcode, specification, packaging, coverage, ...rest } = v
     const payload = {
       ...rest,
+      specification: specification?.trim() || undefined,
+      packaging: packaging?.trim() || undefined,
+      coverage: coverage !== undefined && Number.isFinite(coverage) && coverage > 0 ? coverage : undefined,
       barcode: barcode || undefined,
       promoPrice: hasPromo ? promoPrice : undefined,
       promoEndDate: hasPromo ? promoEndDate : undefined,
@@ -120,6 +131,13 @@ export function ProductFormDialog({ open, onOpenChange, product }: { open: boole
               <span className="text-xs text-muted-foreground">Marge unitaire</span>
               <span className="font-semibold tabular">{margin === null ? "—" : `${formatMoney(margin)} · ${formatPercent((margin / sp) * 100)}`}</span>
             </div>
+          </FormGrid>
+        </FormSection>
+        <FormSection title="Informations techniques (proformas)">
+          <FormGrid>
+            <TextField control={form.control} name="specification" label="Spécificité" placeholder="Ex : Résine époxy transparente étanche" className="sm:col-span-2" />
+            <TextField control={form.control} name="packaging" label="Conditionnement" placeholder="Ex : 20 kg, 4,5 kg, 10 L" description="Par défaut : le conditionnement ci-dessus" />
+            <NumberField control={form.control} name="coverage" label="Couverture par conditionnement" suffix="m²" min={0} step={1} description="Sert à calculer la quantité : surface ÷ couverture" />
           </FormGrid>
         </FormSection>
         <FormSection title="Promotion">

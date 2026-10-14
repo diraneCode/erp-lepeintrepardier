@@ -109,7 +109,7 @@ const demoSchema = z.object({
 export default function DesignSystemPage() {
   return (
     <Page>
-      <PageHeader icon={LuPalette} title="Design system" description="Charte graphique Isonem : tokens, typographie, composants et règles d'usage." />
+      <PageHeader icon={LuPalette} title="Design system" description="Charte graphique Le Peintre Pardier : tokens, typographie, composants et règles d'usage." />
       <Tabs defaultValue="fondations" className="gap-6">
         <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
           <TabsTrigger value="fondations">Fondations</TabsTrigger>
@@ -260,7 +260,7 @@ export default function DesignSystemPage() {
               <Card>
                 <CardContent className="flex flex-col gap-4">
                   <Progress value={68} />
-                  <PersonCell name="Marie Mbarga" sub="ISO-0101 · Responsable de boutique" />
+                  <PersonCell name="Marie Mbarga" sub="LPP-0101 · Caissière" />
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">Recherche globale <Kbd>⌘K</Kbd></div>
                   <div className="flex flex-col gap-2">
                     <Skeleton className="h-4 w-3/4" />

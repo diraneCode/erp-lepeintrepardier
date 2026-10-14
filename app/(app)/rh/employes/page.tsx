@@ -28,13 +28,22 @@ import { formatDate, formatDuration, formatMoney, formatNumber, toDate, toISODat
 import { contractType, department, employeeStatus, maritalStatus, toOptions } from "@/lib/labels"
 import { useStore } from "@/lib/store"
 import { ROLE_LABEL } from "@/lib/access"
-import type { Employee } from "@/lib/types"
+import type { Employee, EmployeeDocumentKind } from "@/lib/types"
+import { formatFileSize, openFile } from "@/lib/files"
 
 function daysAgoISO(days: number) {
   return toISODate(subDays(new Date(), days))
 }
 
-type Row = Employee & { fullName: string; age: number; seniority: number }
+type Row = Employee & { fullName: string; age: number | null; seniority: number; missingDocs: string[] }
+
+const DOCS: { key: EmployeeDocumentKind; label: string }[] = [
+  { key: "photo", label: "Photo" },
+  { key: "cni", label: "CNI" },
+  { key: "cv", label: "CV" },
+  { key: "plan", label: "Plan de localisation" },
+  { key: "diplome", label: "Dernier diplôme" },
+]
 
 export default function EmployeesPage() {
   const router = useRouter()
@@ -54,7 +63,8 @@ export default function EmployeesPage() {
     return employees.map((e) => ({
       ...e,
       fullName: `${e.firstName} ${e.lastName}`,
-      age: differenceInYears(now, toDate(e.birthDate) ?? now),
+      age: e.birthDate ? differenceInYears(now, toDate(e.birthDate) ?? now) : null,
+      missingDocs: [...DOCS.filter((d) => !e.documents?.[d.key]).map((d) => d.label), ...(e.emergencyContact ? [] : ["Contact d'urgence"])],
       seniority: differenceInMonths(now, toDate(e.hireDate) ?? now) / 12,
     }))
   }, [employees])
@@ -71,13 +81,14 @@ export default function EmployeesPage() {
         { id: "contract", label: "Contrat", options: toOptions(contractType), accessor: (e) => e.contractType },
         { id: "location", label: "Affectation", options: locationOptions, accessor: (e) => e.locationId },
         { id: "position", label: "Poste", options: positions, accessor: (e) => e.position },
-        { id: "role", label: "Rôle", options: toOptions(ROLE_LABEL), accessor: (e) => e.role },
+
+        { id: "dossier", label: "Dossier", options: [{ value: "complet", label: "Complet" }, { value: "incomplet", label: "Incomplet" }], accessor: (e) => (e.missingDocs.length ? "incomplet" : "complet") },
         { id: "gender", label: "Sexe", options: [{ value: "H", label: "Hommes" }, { value: "F", label: "Femmes" }], accessor: (e) => e.gender },
       ],
       ranges: [
         { id: "salary", label: "Salaire de base", unit: "FCFA", accessor: (e) => e.baseSalary },
         { id: "seniority", label: "Ancienneté", unit: "ans", accessor: (e) => e.seniority },
-        { id: "age", label: "Âge", unit: "ans", accessor: (e) => e.age },
+        { id: "age", label: "Âge", unit: "ans", accessor: (e) => e.age ?? -1 },
       ],
     }),
     [locationOptions, positions]
@@ -110,7 +121,14 @@ export default function EmployeesPage() {
   }
 
   const columns: Column<Row>[] = [
-    { id: "name", header: "Employé", accessor: (e) => e.fullName, cell: (e) => <PersonCell name={e.fullName} sub={`${e.matricule} · ${e.position}`} />, className: "min-w-[230px]" },
+    { id: "name", header: "Employé", accessor: (e) => e.fullName, cell: (e) => <PersonCell name={e.fullName} sub={`${e.matricule} · ${e.position}`} photoId={e.documents?.photo?.id} />, className: "min-w-[230px]" },
+    {
+      id: "dossier",
+      header: "Dossier",
+      accessor: (e) => (e.missingDocs.length ? `Incomplet (${e.missingDocs.length})` : "Complet"),
+      cell: (e) => <StatusBadge def={e.missingDocs.length ? { label: `${e.missingDocs.length} pièce(s) manquante(s)`, tone: "warning" } : { label: "Complet", tone: "success" }} />,
+      hideOnMobile: true,
+    },
     { id: "matricule", header: "Matricule", accessor: (e) => e.matricule, defaultHidden: true },
     { id: "position", header: "Poste", accessor: (e) => e.position, defaultHidden: true },
     { id: "department", header: "Service", accessor: (e) => department[e.department], hideOnMobile: true },
@@ -120,7 +138,7 @@ export default function EmployeesPage() {
     { id: "salary", header: "Salaire de base", accessor: (e) => e.baseSalary, cell: (e) => formatMoney(e.baseSalary), align: "right", exportType: "money", footer: (r) => formatMoney(r.filter((e) => e.status !== "sorti").reduce((s, e) => s + e.baseSalary, 0)) },
     { id: "phone", header: "Téléphone", accessor: (e) => e.phone, defaultHidden: true },
     { id: "email", header: "E-mail", accessor: (e) => e.email, defaultHidden: true },
-    { id: "role", header: "Rôle", accessor: (e) => ROLE_LABEL[e.role], hideOnMobile: true, defaultHidden: true },
+    { id: "role", header: "Accès", accessor: (e) => ROLE_LABEL[e.role], hideOnMobile: true, defaultHidden: true },
     { id: "status", header: "Statut", accessor: (e) => employeeStatus[e.status].label, cell: (e) => <StatusBadge def={employeeStatus[e.status]} /> },
   ]
 
@@ -205,7 +223,7 @@ export default function EmployeesPage() {
         title={
           viewing && (
             <span className="flex items-center gap-3">
-              <UserAvatar name={viewing.fullName} className="size-9" />
+              <UserAvatar name={viewing.fullName} className="size-9" photoId={viewing.documents?.photo?.id} />
               {viewing.fullName}
             </span>
           )
@@ -243,20 +261,55 @@ export default function EmployeesPage() {
                   { label: "Salaire de base", value: formatMoney(viewing.baseSalary) },
                   { label: "Congés annuels", value: `${profile.leaveTaken} j pris · ${profile.leaveLeft} j restants${profile.pending ? ` · ${profile.pending} demande(s) en attente` : ""}` },
                   { label: "N° CNPS", value: viewing.cnpsNumber },
-                  { label: "RIB", value: <span className="font-mono text-xs">{viewing.bankAccount}</span> },
+                  { label: "RIB", value: viewing.bankAccount ? <span className="font-mono text-xs">{viewing.bankAccount}</span> : "Non renseigné" },
                 ]}
               />
             </DetailSection>
             <DetailSection title="État civil & coordonnées">
               <DescriptionList
                 items={[
-                  { label: "Date de naissance", value: `${formatDate(viewing.birthDate)} (${viewing.age} ans)` },
-                  { label: "Situation", value: `${maritalStatus[viewing.maritalStatus]} · ${viewing.children} enfant(s)` },
+                  { label: "Date de naissance", value: viewing.birthDate ? `${formatDate(viewing.birthDate)} (${viewing.age} ans)` : "Non renseignée" },
+                  { label: "Situation", value: `${maritalStatus[viewing.maritalStatus]}${viewing.children !== undefined ? ` · ${viewing.children} enfant(s) à charge` : ""}` },
                   { label: "Téléphone", value: viewing.phone },
                   { label: "E-mail", value: viewing.email },
                   { label: "Adresse", value: viewing.address, full: true },
                 ]}
               />
+            </DetailSection>
+            <DetailSection title="Contact d'urgence">
+              {viewing.emergencyContact ? (
+                <DescriptionList
+                  items={[
+                    { label: "Nom", value: viewing.emergencyContact.name },
+                    { label: "Lien", value: viewing.emergencyContact.relation },
+                    { label: "Téléphone", value: <a className="hover:underline" href={`tel:${viewing.emergencyContact.phone}`}>{viewing.emergencyContact.phone}</a> },
+                  ]}
+                />
+              ) : (
+                <p className="text-sm text-warning">Non renseigné — à compléter dans le dossier.</p>
+              )}
+            </DetailSection>
+            <DetailSection title="Pièces du dossier">
+              <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {DOCS.map((d) => {
+                  const f = viewing.documents?.[d.key]
+                  return (
+                    <li key={d.key} className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm">
+                      <div className="min-w-0">
+                        <div className="font-medium">{d.label}</div>
+                        <div className="truncate text-xs text-muted-foreground">{f ? `${f.name} · ${formatFileSize(f.size)}` : "Manquant"}</div>
+                      </div>
+                      {f ? (
+                        <Button variant="outline" size="xs" onClick={() => void openFile(f).then((ok) => !ok && toast.error("Fichier introuvable sur cet appareil"))}>
+                          <LuEye /> Ouvrir
+                        </Button>
+                      ) : (
+                        <StatusBadge def={{ label: "Manquant", tone: "warning" }} />
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
             </DetailSection>
           </div>
         )}

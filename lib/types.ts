@@ -1,7 +1,7 @@
 import type { Role } from "@/lib/access"
 
 /* ==========================================================================
-   Modèle de données Isonem — toutes les dates sont au format ISO "yyyy-MM-dd"
+   Modèle de données Le Peintre Pardier — toutes les dates sont au format ISO "yyyy-MM-dd"
    (ou "yyyy-MM-ddTHH:mm" pour les horodatages).
    ========================================================================== */
 
@@ -9,8 +9,13 @@ export type ID = string
 
 export type PaymentMethod = "especes" | "mobile_money" | "carte" | "virement" | "cheque" | "credit"
 
+export type LineSection = "traitement" | "main_oeuvre" | "accessoires"
+
 export interface LineItem {
+  /** Article du catalogue ; chaîne vide pour une ligne libre (service, accessoire non référencé…) */
   productId: ID
+  /** Ligne saisie librement, sans article du catalogue */
+  custom?: boolean
   description: string
   quantity: number
   unitPrice: number
@@ -18,6 +23,25 @@ export interface LineItem {
   discount: number
   /** TVA en % */
   taxRate: number
+  /** Proforma : rubrique de la ligne */
+  section?: LineSection
+  /** Proforma : spécificité technique */
+  specification?: string
+  /** Proforma : conditionnement (ex. 20 kg, 4 L) */
+  packaging?: string
+  /** Proforma : surface couverte par conditionnement (m²) */
+  coverage?: number
+  /** Proforma : surface à traiter (m²) */
+  surface?: number
+}
+
+/** Évaluation des surfaces à traiter (en-tête de proforma) */
+export interface SurfaceRow {
+  designation: string
+  quantity: number
+  unit: string
+  treatment: string
+  commercialName: string
 }
 
 /* ---------- Gestion commerciale ---------- */
@@ -123,6 +147,13 @@ export interface Quote {
   ownerId: ID
   notes?: string
   invoiceId?: ID
+  /** Intitulé du projet (ex. Traitement parking) */
+  project?: string
+  /** Lieu du chantier */
+  site?: string
+  /** Ville d'émission (« Douala, le … ») */
+  issuedIn?: string
+  surfaces?: SurfaceRow[]
 }
 
 /* ---------- Ventes & facturation ---------- */
@@ -202,6 +233,12 @@ export interface Product {
   promoPrice?: number
   /** Fin de validité du prix promotionnel (incluse) */
   promoEndDate?: string
+  /** Conditionnement libre affiché sur les proformas (ex. 20 kg, 4,5 kg) */
+  packaging?: string
+  /** Spécificité technique affichée sur les proformas (ex. Résine époxy transparente) */
+  specification?: string
+  /** Surface couverte par conditionnement, en m² (sert au calcul des quantités) */
+  coverage?: number
   /** Date de péremption du lot en stock (facultative : outillage, accessoires…) */
   expiryDate?: string
   description?: string
@@ -386,6 +423,23 @@ export type Department =
 export type ContractType = "cdi" | "cdd" | "stage" | "interim"
 export type EmployeeStatus = "actif" | "conge" | "suspendu" | "sorti"
 
+/** Fichier joint (le contenu est stocké dans IndexedDB, voir lib/files.ts) */
+export interface StoredFile {
+  id: ID
+  name: string
+  type: string
+  size: number
+  uploadedAt: string
+}
+
+export type EmployeeDocumentKind = "photo" | "cni" | "cv" | "plan" | "diplome"
+
+export interface EmergencyContact {
+  name: string
+  relation: string
+  phone: string
+}
+
 export interface Employee {
   id: ID
   matricule: string
@@ -394,7 +448,8 @@ export interface Employee {
   gender: "H" | "F"
   email: string
   phone: string
-  birthDate: string
+  /** Facultative */
+  birthDate?: string
   hireDate: string
   department: Department
   position: string
@@ -403,10 +458,15 @@ export interface Employee {
   locationId: ID
   status: EmployeeStatus
   cnpsNumber: string
-  bankAccount: string
+  /** Facultatif */
+  bankAccount?: string
   address: string
   maritalStatus: "celibataire" | "marie" | "divorce" | "veuf"
-  children: number
+  /** Enfants à charge (facultatif) */
+  children?: number
+  /** Photo, CNI, CV, plan de localisation, dernier diplôme */
+  documents?: Partial<Record<EmployeeDocumentKind, StoredFile>>
+  emergencyContact?: EmergencyContact
   /** Rôle applicatif : détermine les modules et données accessibles */
   role: Role
 }

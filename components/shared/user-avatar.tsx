@@ -1,5 +1,8 @@
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+"use client"
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { initials } from "@/lib/format"
+import { useFileUrl } from "@/lib/files"
 import { cn } from "@/lib/utils"
 
 const palette = [
@@ -16,18 +19,21 @@ function hash(s: string) {
   return Math.abs(h)
 }
 
-export function UserAvatar({ name, className }: { name: string; className?: string }) {
+/** Avatar : photo de l'employé si elle existe, sinon initiales colorées. */
+export function UserAvatar({ name, className, photoId }: { name: string; className?: string; photoId?: string }) {
+  const url = useFileUrl(photoId)
   return (
     <Avatar className={cn("size-8", className)}>
+      {url && <AvatarImage src={url} alt={name} className="object-cover" />}
       <AvatarFallback className={cn("text-xs font-medium", palette[hash(name) % palette.length])}>{initials(name)}</AvatarFallback>
     </Avatar>
   )
 }
 
-export function PersonCell({ name, sub }: { name: string; sub?: string }) {
+export function PersonCell({ name, sub, photoId }: { name: string; sub?: string; photoId?: string }) {
   return (
     <div className="flex min-w-0 items-center gap-2.5">
-      <UserAvatar name={name} className="size-7" />
+      <UserAvatar name={name} className="size-7" photoId={photoId} />
       <div className="min-w-0">
         <div className="truncate font-medium">{name}</div>
         {sub && <div className="truncate text-xs text-muted-foreground">{sub}</div>}
