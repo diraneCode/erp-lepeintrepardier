@@ -1,26 +1,204 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-chart-6: var(--chart-6);
+  --color-brand-violet: var(--brand-violet);
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-green: var(--brand-green);
+  --color-brand-orange: var(--brand-orange);
+  --color-brand-red: var(--brand-red);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ==========================================================================
+   ISONEM — Design tokens
+   Charte : violet Pardier (primaire) + palette du logo (bleu, vert, orange,
+   rouge) utilisée pour les statuts et les graphiques. Aucun dégradé.
+   ========================================================================== */
+:root {
+  /* Marque */
+  --brand-violet: #4b2e9e;
+  --brand-blue: #2f80d1;
+  --brand-green: #5aa832;
+  --brand-orange: #ee8f1f;
+  --brand-red: #dc3b30;
+
+  /* Surfaces & texte */
+  --background: #ffffff;
+  --foreground: #1a1830;
+  --card: #ffffff;
+  --card-foreground: #1a1830;
+  --popover: #ffffff;
+  --popover-foreground: #1a1830;
+  --primary: #4b2e9e;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f1fa;
+  --secondary-foreground: #2e2266;
+  --muted: #f6f6f9;
+  --muted-foreground: #6b6880;
+  --accent: #f1eefb;
+  --accent-foreground: #2e2266;
+  --border: #e7e6ee;
+  --input: #e2e0ea;
+  --ring: #8b74e0;
+
+  /* Sémantique */
+  --destructive: #dc3b30;
+  --destructive-foreground: #ffffff;
+  --success: #2f8a2a;
+  --success-foreground: #ffffff;
+  --warning: #c9700a;
+  --warning-foreground: #ffffff;
+  --info: #2f80d1;
+  --info-foreground: #ffffff;
+
+  /* Graphiques — ordre catégoriel fixe, validé daltonisme (ΔE CVD ≥ 11) */
+  --chart-1: #5b3fb0;
+  --chart-2: #c97a12;
+  --chart-3: #2a7fd0;
+  --chart-4: #3a8f2a;
+  --chart-5: #c0508f;
+  --chart-6: #a8a5b8;
+
+  --radius: 0.625rem;
+
+  /* Barre latérale */
+  --sidebar: #fafafc;
+  --sidebar-foreground: #1a1830;
+  --sidebar-primary: #4b2e9e;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1eefb;
+  --sidebar-accent-foreground: #2e2266;
+  --sidebar-border: #ebeaf1;
+  --sidebar-ring: #8b74e0;
+}
+
+.dark {
+  --background: #0f0e17;
+  --foreground: #edecf4;
+  --card: #17161f;
+  --card-foreground: #edecf4;
+  --popover: #1b1a24;
+  --popover-foreground: #edecf4;
+  --primary: #8b74e0;
+  --primary-foreground: #120d26;
+  --secondary: #24223a;
+  --secondary-foreground: #e4defb;
+  --muted: #1f1e29;
+  --muted-foreground: #9a98ab;
+  --accent: #262338;
+  --accent-foreground: #e4defb;
+  --border: #2a2836;
+  --input: #34323f;
+  --ring: #8b74e0;
+
+  --destructive: #f0685e;
+  --destructive-foreground: #1a0503;
+  --success: #6cc04a;
+  --success-foreground: #0b1f06;
+  --warning: #f2a740;
+  --warning-foreground: #241402;
+  --info: #5ea4ea;
+  --info-foreground: #04172b;
+
+  --chart-1: #8670dc;
+  --chart-2: #c47c22;
+  --chart-3: #3a8ad6;
+  --chart-4: #4ea035;
+  --chart-5: #cc5f9b;
+  --chart-6: #5d5a6e;
+
+  --sidebar: #13121b;
+  --sidebar-foreground: #edecf4;
+  --sidebar-primary: #8b74e0;
+  --sidebar-primary-foreground: #120d26;
+  --sidebar-accent: #24223a;
+  --sidebar-accent-foreground: #e4defb;
+  --sidebar-border: #24222f;
+  --sidebar-ring: #8b74e0;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+  }
+  ::selection {
+    @apply bg-primary/20;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+}
+
+@media print {
+  [data-slot="sidebar"],
+  [data-print="hide"] {
+    display: none !important;
+  }
 }

@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Isonem CRM
 
-## Getting Started
+Frontend du CRM/ERP d'Isonem (Le Peintre Pardier) — Next.js 16, React 19, Tailwind CSS 4, shadcn/ui.
 
-First, run the development server:
+## Démarrer
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+pnpm dev      # http://localhost:3000
+pnpm build && pnpm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Connexion : choisissez un compte de démonstration sur `/login` (mot de passe `Isonem@2026`).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Les données sont générées au premier lancement (jeu de démonstration camerounais) et
+conservées dans le `localStorage` du navigateur. Réinitialisation : *Mon compte → Préférences*.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Modules
 
-## Learn More
+| Route | Module |
+| --- | --- |
+| `/` | Tableau de bord |
+| `/commercial/prospects`, `/commercial/relances`, `/commercial/clients`, `/commercial/opportunites`, `/commercial/devis` | Gestion commerciale : prospects, relances, clients, pipeline, devis |
+| `/ventes`, `/facturation` | Ventes, facturation & encaissements |
+| `/marketing`, `/marketing/rendez-vous`, `/marketing/evenements` | Campagnes & promotions, prise de rendez-vous, séminaires & formations |
+| `/produits`, `/stock`, `/magasins`, `/boutiques` | Catalogue, stock & mouvements, entrepôts, points de vente |
+| `/comptabilite`, `/depenses` | Journal, grand livre, balance, résultat (SYSCOHADA) ; dépenses |
+| `/rh/employes`, `/rh/pointage`, `/rh/conges`, `/rh/paie` | Employés, fiches de pointage, congés, bulletins de paie |
+| `/moi/pointage`, `/moi/conges`, `/moi/paie` | Espace personnel : pointage, congés, bulletins (tous les employés) |
+| `/compte`, `/design-system`, `/login` | Mon compte (consultation + mot de passe), charte graphique, connexion |
 
-To learn more about Next.js, take a look at the following resources:
+## Rôles et accès
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`lib/access.ts` définit, pour chaque rôle, les modules accessibles, la portée des données
+(`all` : toute l'entreprise · `shop` : son site d'affectation · `own` : ses propres données) et le
+droit d'écriture. `hooks/use-access.ts` fournit l'utilisateur connecté et les données filtrées
+(`useScopedData`). Les filtres par personne (commercial, vendeur, responsable…) ne sont proposés
+qu'aux profils à portée globale. Rôles : super administrateur, directeur commercial, commercial,
+responsable de boutique, caissière, vendeur, gestionnaire de stock, magasinier, comptable, RH,
+marketing, employé. Le poste choisi dans la fiche employé propose le rôle correspondant (`POSITIONS` dans `lib/labels.ts`).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Architecture
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `lib/types.ts` — modèle de données · `lib/data/seed.ts` — jeu de démonstration
+- `lib/store.ts` — store zustand persisté + actions métier (vente → stock → facture → écriture comptable)
+- `lib/export.ts` — exports PDF (jsPDF), Excel (write-excel-file), CSV ; facture/devis/bulletin PDF
+- `hooks/use-filters.ts` + `components/shared/filter-bar.tsx` — recherche, période, facettes, intervalles
+- `components/shared/data-table.tsx` — tri, pagination, sélection, colonnes, totaux, export
+- `components/forms/*` — champs react-hook-form + zod
+- `app/globals.css` — tokens du design system (clair/sombre, palette graphique validée daltonisme)
