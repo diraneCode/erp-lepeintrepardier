@@ -17,7 +17,7 @@ import { toDb } from "@/lib/supabase/mapping"
 config({ path: ".env.local" })
 config()
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin : undefined
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY
 if (!url || !key) {
   console.error("✖ Renseignez NEXT_PUBLIC_SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY dans .env.local")
