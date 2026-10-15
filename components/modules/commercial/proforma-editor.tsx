@@ -56,7 +56,7 @@ export function ProformaEditor({
   const items = React.useMemo(() => watchedItems ?? [], [watchedItems])
   const surfaces = (useWatch({ control, name: "surfaces" }) ?? []) as SurfaceRow[]
   const applyTax = useWatch({ control, name: "applyTax" })
-  const { productById, productOptions } = useLookups()
+  const { productById, productOptions } = useLookups(["productById", "productOptions"])
 
   const projectSurface = surfaces.filter((s) => s.unit === "m²").reduce((s, r) => s + (Number.isFinite(r.quantity) ? r.quantity : 0), 0)
 

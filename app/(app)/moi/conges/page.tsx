@@ -31,7 +31,7 @@ export default function MyLeavesPage() {
   const leaves = useStore((s) => s.leaves)
   const update = useStore((s) => s.update)
   const log = useStore((s) => s.log)
-  const { employeeName } = useLookups()
+  const { employeeName } = useLookups(["employeeName"])
   const [formOpen, setFormOpen] = useTransientState(false)
   const [editing, setEditing] = useTransientState<Leave | undefined>(undefined)
   const [toCancel, setToCancel] = useTransientState<Leave | null>(null)
@@ -135,9 +135,9 @@ export default function MyLeavesPage() {
         description={toCancel ? `${leaveType[toCancel.type]} du ${formatDate(toCancel.startDate)} au ${formatDate(toCancel.endDate)} (${formatNumber(toCancel.days)} j).` : undefined}
         confirmLabel="Annuler la demande"
         destructive
-        onConfirm={() => {
+        onConfirm={async () => {
           if (toCancel) {
-            update("leaves", toCancel.id, { status: "annule" })
+            if (!(await update("leaves", toCancel.id, { status: "annule" }))) return
             log("Annulation", "Mes congés", `Demande du ${formatDate(toCancel.startDate)}`)
           }
           toast.success("Demande annulée")

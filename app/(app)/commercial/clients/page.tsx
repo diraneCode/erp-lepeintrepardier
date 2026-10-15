@@ -53,11 +53,11 @@ type Row = Client & { revenue: number; balance: number; invoiceCount: number; la
 
 export default function ClientsPage() {
   const router = useRouter()
-  const { clients, invoices, opportunities } = useScopedData()
+  const { clients, invoices, opportunities } = useScopedData(["clients", "invoices", "opportunities"])
   const acc = useModuleAccess("clients")
-  const update = useStore((s) => s.update)
+  const updateMany = useStore((s) => s.updateMany)
   const remove = useStore((s) => s.remove)
-  const { employeeName, employeeOptions } = useLookups()
+  const { employeeName, employeeOptions } = useLookups(["employeeName", "employeeOptions"])
 
   const { access } = useAccess()
   const canQuote = !!access("devis")?.write
@@ -206,8 +206,8 @@ export default function ClientsPage() {
                     {toOptions(clientStatus).map((o) => (
                       <DropdownMenuItem
                         key={o.value}
-                        onSelect={() => {
-                          selected.forEach((c) => update("clients", c.id, { status: o.value }))
+                        onSelect={async () => {
+                          if (!(await updateMany("clients", selected.map((c) => c.id), { status: o.value }))) return
                           toast.success(`${selected.length} client(s) passé(s) en « ${o.label} »`)
                           clear()
                         }}
@@ -349,9 +349,9 @@ export default function ClientsPage() {
         description="Cette action est irréversible. Les factures et devis existants seront conservés mais ne seront plus rattachés à une fiche client."
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!toDelete) return
-          remove("clients", toDelete)
+          if (!(await remove("clients", toDelete))) return
           toast.success(`${toDelete.length} client(s) supprimé(s)`)
           setToDelete(null)
           setViewing(null)

@@ -216,7 +216,7 @@ function JournalTab() {
             rowActions={(e) => (
               <RowActions
                 actions={[
-                  { label: "Valider", icon: LuCircleCheck, onSelect: () => { update("journalEntries", e.id, { status: "valide" }); toast.success("Écriture validée") }, hidden: e.status === "valide" },
+                  { label: "Valider", icon: LuCircleCheck, onSelect: () => { void update("journalEntries", e.id, { status: "valide" }).then((ok) => ok && toast.success("Écriture validée")) }, hidden: e.status === "valide" },
                   { label: "Supprimer", icon: LuTrash2, destructive: true, onSelect: () => setToDelete(e.id), hidden: e.status === "valide" },
                   { label: "Voir les lignes", icon: LuBookOpen, onSelect: () => setViewing(e) },
                 ]}
@@ -250,8 +250,10 @@ function JournalTab() {
         title="Supprimer cette écriture en brouillard ?"
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("journalEntries", [toDelete])
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("journalEntries", [toDelete]))) return
+          }
           toast.success("Écriture supprimée")
           setToDelete(null)
         }}

@@ -14,6 +14,7 @@ import { useLookups } from "@/hooks/use-lookups"
 import { useCurrentUser, useModuleAccess } from "@/hooks/use-access"
 import { paymentMethod, saleChannel, saleStatus, toOptions } from "@/lib/labels"
 import { nextNumber, uid, useStore } from "@/lib/store"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const COUNTER = "__comptoir__"
 
@@ -49,9 +50,9 @@ const defaults = (): FormValues => ({
   notes: "",
 })
 
-export function SaleFormDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+function SaleFormDialogContent({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const createSale = useStore((s) => s.createSale)
-  const { clientOptions, employeeOptions, employeeById, shopOptions: allShops } = useLookups()
+  const { clientOptions, employeeOptions, employeeById, shopOptions: allShops } = useLookups(["clientOptions", "employeeOptions", "employeeById", "shopOptions"])
   const acc = useModuleAccess("ventes")
   const me = useCurrentUser()
   const myShop = allShops.find((s) => s.value === me?.locationId)
@@ -65,10 +66,10 @@ export function SaleFormDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     if (open) form.reset({ ...defaults(), sellerId: acc.global ? "" : me?.id ?? "", boutiqueId: !acc.global && myShop ? myShop.value : "" })
   }, [open, form, acc.global, me, myShop])
 
-  const onSubmit = form.handleSubmit((values) => {
+  const onSubmit = form.handleSubmit(async (values) => {
     const { createInvoice, clientId: cid, ...rest } = values
     const number = nextNumber("VTE", useStore.getState().sales)
-    createSale({ ...rest, id: uid("v"), number, clientId: cid === COUNTER ? null : cid }, { createInvoice: createInvoice && cid !== COUNTER })
+    if (!(await createSale({ ...rest, id: uid("v"), number, clientId: cid === COUNTER ? null : cid }, { createInvoice: createInvoice && cid !== COUNTER }))) return
     toast.success("Vente enregistrée", { description: `${number} — stock mis à jour` })
     onOpenChange(false)
   })
@@ -126,3 +127,5 @@ export function SaleFormDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     </FormDialog>
   )
 }
+
+export const SaleFormDialog = lazyDialog(SaleFormDialogContent)

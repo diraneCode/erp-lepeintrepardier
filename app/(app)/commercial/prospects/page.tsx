@@ -48,16 +48,16 @@ const FUNNEL: Prospect["status"][] = ["nouveau", "contacte", "qualifie", "conver
 
 export default function ProspectsPage() {
   const router = useRouter()
-  const { prospects } = useScopedData()
+  const { prospects } = useScopedData(["prospects"])
   const followups = useStore((s) => s.followups)
-  const update = useStore((s) => s.update)
+  const updateMany = useStore((s) => s.updateMany)
   const remove = useStore((s) => s.remove)
   const convert = useStore((s) => s.convertProspect)
   const acc = useModuleAccess("prospects")
   const { access } = useAccess()
   const canFollowup = !!access("relances")?.write
   const canMeet = !!access("rendez_vous")?.write
-  const { employeeName, employeeOptions } = useLookups()
+  const { employeeName, employeeOptions } = useLookups(["employeeName", "employeeOptions"])
 
   const [formOpen, setFormOpen] = useTransientState(false)
   const [editing, setEditing] = useTransientState<Prospect | undefined>(undefined)
@@ -204,7 +204,7 @@ export default function ProspectsPage() {
             }}
             bulkActions={(sel, clear) => (
               <>
-                <Button variant="outline" size="sm" onClick={() => { sel.filter(active).forEach((p) => update("prospects", p.id, { status: "contacte", lastContact: today })); toast.success("Prospects marqués comme contactés"); clear() }}>
+                <Button variant="outline" size="sm" onClick={async () => { if (!(await updateMany("prospects", sel.filter(active).map((p) => p.id), { status: "contacte", lastContact: today }))) return; toast.success("Prospects marqués comme contactés"); clear() }}>
                   Marquer contactés
                 </Button>
                 {acc.global && (
@@ -314,9 +314,9 @@ export default function ProspectsPage() {
         title={`Convertir « ${toConvert?.name ?? ""} » en client ?`}
         description="Une fiche client est créée avec ses coordonnées ; ses relances en cours sont transférées sur le client."
         confirmLabel="Convertir"
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!toConvert) return
-          const code = convert(toConvert.id)
+          const code = await convert(toConvert.id)
           if (code)
             toast.success("Prospect converti", {
               description: `Fiche client ${code} créée`,
@@ -332,8 +332,10 @@ export default function ProspectsPage() {
         description="Cette action est irréversible."
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("prospects", toDelete)
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("prospects", toDelete))) return
+          }
           toast.success("Prospect(s) supprimé(s)")
           setToDelete(null)
           setViewingId(null)

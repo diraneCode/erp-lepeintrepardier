@@ -14,13 +14,14 @@ import { useLookups } from "@/hooks/use-lookups"
 import { followupChannel, followupTarget, toOptions } from "@/lib/labels"
 import { uid, useStore } from "@/lib/store"
 import type { Followup, FollowupTarget } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const day = (n = 0) => format(addDays(new Date(), n), "yyyy-MM-dd")
 
 /** Options de cible d'une relance, limitées au périmètre de l'utilisateur. */
 export function useFollowupTargets() {
-  const { prospects, clients, quotes, invoices } = useScopedData()
-  const { clientName } = useLookups()
+  const { prospects, clients, quotes, invoices } = useScopedData(["prospects", "clients", "quotes", "invoices"])
+  const { clientName } = useLookups(["clientName"])
   return React.useMemo(
     () => ({
       prospect: prospects.filter((p) => p.status !== "converti" && p.status !== "perdu").map((p) => ({ value: p.id, label: p.name, hint: p.code })),
@@ -50,12 +51,12 @@ export interface FollowupPreset {
   subject?: string
 }
 
-export function FollowupFormDialog({ open, onOpenChange, followup, preset }: { open: boolean; onOpenChange: (o: boolean) => void; followup?: Followup; preset?: FollowupPreset }) {
+function FollowupFormDialogContent({ open, onOpenChange, followup, preset }: { open: boolean; onOpenChange: (o: boolean) => void; followup?: Followup; preset?: FollowupPreset }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
   const acc = useModuleAccess("relances")
   const me = useCurrentUser()
-  const { employeeOptions } = useLookups()
+  const { employeeOptions } = useLookups(["employeeOptions"])
   const targets = useFollowupTargets()
   const form = useForm<FormValues>({ resolver: zodResolver(schema) })
 
@@ -80,12 +81,12 @@ export function FollowupFormDialog({ open, onOpenChange, followup, preset }: { o
     prevType.current = targetType
   }, [targetType, form])
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     if (followup) {
-      update("followups", followup.id, v)
+      if (!(await update("followups", followup.id, v))) return
       toast.success("Relance mise à jour")
     } else {
-      add("followups", { ...v, id: uid("rl"), status: "a_faire", createdAt: day() })
+      if (!(await add("followups", { ...v, id: uid("rl"), status: "a_faire", createdAt: day() }))) return
       toast.success("Relance programmée", { description: `${v.subject} — ${format(new Date(`${v.dueDate}T00:00:00`), "dd/MM/yyyy")}` })
     }
     onOpenChange(false)
@@ -137,9 +138,9 @@ export function CompleteFollowupDialog({ followup, onOpenChange }: { followup: F
   }, [followup, form])
   const scheduleNext = useWatch({ control: form.control, name: "scheduleNext" })
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     if (!followup) return
-    complete(followup.id, v.outcome, v.scheduleNext && v.nextDate ? { dueDate: v.nextDate, channel: v.nextChannel } : undefined)
+    if (!(await complete(followup.id, v.outcome, v.scheduleNext && v.nextDate ? { dueDate: v.nextDate, channel: v.nextChannel } : undefined))) return
     toast.success("Relance effectuée", { description: v.scheduleNext ? "Prochaine relance programmée" : undefined })
     onOpenChange(false)
   })
@@ -159,3 +160,5 @@ export function CompleteFollowupDialog({ followup, onOpenChange }: { followup: F
     </FormDialog>
   )
 }
+
+export const FollowupFormDialog = lazyDialog(FollowupFormDialogContent)

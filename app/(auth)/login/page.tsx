@@ -13,36 +13,24 @@ import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
 import { TextField } from "@/components/forms/fields"
 import { Logo } from "@/components/layout/logo"
-import { UserAvatar } from "@/components/shared/user-avatar"
-import { DEFAULT_PASSWORD, ROLE_LABEL, type Role } from "@/lib/access"
-import { initStore, useStore } from "@/lib/store"
+import { useStore } from "@/lib/store"
+import { isSupabaseConfigured } from "@/lib/supabase/env"
 
 const schema = z.object({
   email: z.email("Adresse e-mail invalide"),
   password: z.string().min(6, "6 caractères minimum"),
 })
 
-const DEMO_ROLES: Role[] = ["super_admin", "caissiere", "gestionnaire_stock", "commercial", "magasinier"]
-
 export default function LoginPage() {
   const router = useRouter()
-  const hydrated = useStore((s) => s.hydrated)
-  const employees = useStore((s) => s.employees)
   const login = useStore((s) => s.login)
   const [show, setShow] = React.useState(false)
   const [pending, setPending] = React.useState(false)
   const form = useForm<z.infer<typeof schema>>({ resolver: zodResolver(schema), defaultValues: { email: "", password: "" } })
 
-  React.useEffect(() => {
-    void initStore()
-  }, [])
-
-  const demo = DEMO_ROLES.map((r) => employees.find((e) => e.role === r && e.status === "actif")).filter((e) => !!e)
-
   const onSubmit = form.handleSubmit(async (v) => {
     setPending(true)
-    await new Promise((r) => setTimeout(r, 400))
-    const error = login(v.email, v.password)
+    const error = await login(v.email, v.password)
     setPending(false)
     if (error) {
       form.setError("password", { message: error })
@@ -72,40 +60,17 @@ export default function LoginPage() {
                 {show ? <LuEyeOff className="size-4" /> : <LuEye className="size-4" />}
               </button>
             </div>
-            <Button type="submit" size="lg" disabled={pending || !hydrated}>
+            <Button type="submit" size="lg" disabled={pending || !isSupabaseConfigured}>
               {pending ? <Spinner /> : <LuLogIn />} Se connecter
             </Button>
             <p className="text-xs text-muted-foreground">Mot de passe oublié ? Contactez le service des ressources humaines.</p>
+            {!isSupabaseConfigured && (
+              <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                Configuration manquante : renseignez NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY dans .env.local puis redémarrez le serveur.
+              </p>
+            )}
           </form>
 
-          {demo.length > 0 && (
-            <div className="flex flex-col gap-2 border-t pt-6">
-              <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">Comptes de démonstration</p>
-              <p className="text-xs text-muted-foreground">
-                Mot de passe : <code className="rounded bg-muted px-1 py-0.5 font-mono">{DEFAULT_PASSWORD}</code>
-              </p>
-              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                {demo.map((e) => (
-                  <button
-                    key={e.id}
-                    type="button"
-                    onClick={() => {
-                      form.setValue("email", e.email)
-                      form.setValue("password", DEFAULT_PASSWORD)
-                      form.clearErrors()
-                    }}
-                    className="flex min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs transition-colors hover:border-primary/40 hover:bg-muted/50"
-                  >
-                    <UserAvatar name={`${e.firstName} ${e.lastName}`} className="size-6 text-[10px]" />
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{ROLE_LABEL[e.role]}</span>
-                      <span className="block truncate text-muted-foreground">{e.firstName} {e.lastName}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </motion.div>
       </div>
       <div className="hidden flex-col justify-between bg-primary p-12 text-primary-foreground lg:flex">

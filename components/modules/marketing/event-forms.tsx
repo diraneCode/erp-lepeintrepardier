@@ -14,6 +14,7 @@ import { useLookups } from "@/hooks/use-lookups"
 import { eventAudience, eventStatus, eventType, toOptions } from "@/lib/labels"
 import { uid, useStore } from "@/lib/store"
 import type { MarketingEvent } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Heure invalide")
 
@@ -42,10 +43,10 @@ const eventSchema = z
   .refine((v) => !!v.trainerId || (v.externalSpeaker ?? "").trim().length >= 3, { path: ["externalSpeaker"], message: "Indiquez un animateur interne ou un intervenant externe" })
 type EventValues = z.infer<typeof eventSchema>
 
-export function EventFormDialog({ open, onOpenChange, event }: { open: boolean; onOpenChange: (o: boolean) => void; event?: MarketingEvent }) {
+function EventFormDialogContent({ open, onOpenChange, event }: { open: boolean; onOpenChange: (o: boolean) => void; event?: MarketingEvent }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
-  const { employeeOptions } = useLookups()
+  const { employeeOptions } = useLookups(["employeeOptions"])
   const me = useCurrentUser()
   const form = useForm<EventValues>({ resolver: zodResolver(eventSchema) })
 
@@ -73,17 +74,17 @@ export function EventFormDialog({ open, onOpenChange, event }: { open: boolean; 
     })
   }, [open, event, form])
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     if (event && v.capacity < event.participants.filter((p) => p.status !== "annule").length) {
       form.setError("capacity", { message: "Inférieure au nombre d'inscrits actuel" })
       return
     }
     const payload = { ...v, trainerId: v.trainerId || undefined, externalSpeaker: v.externalSpeaker || undefined }
     if (event) {
-      update("events", event.id, payload)
+      if (!(await update("events", event.id, payload))) return
       toast.success("Événement mis à jour", { description: v.title })
     } else {
-      add("events", { ...payload, id: uid("ev"), participants: [], ownerId: me?.id ?? "" })
+      if (!(await add("events", { ...payload, id: uid("ev"), participants: [], ownerId: me?.id ?? "" }))) return
       toast.success("Événement créé", { description: v.title })
     }
     onOpenChange(false)
@@ -138,7 +139,7 @@ const participantSchema = z.object({
 })
 type ParticipantValues = z.infer<typeof participantSchema>
 
-export function ParticipantFormDialog({ event, open, onOpenChange }: { event: MarketingEvent | null; open: boolean; onOpenChange: (o: boolean) => void }) {
+function ParticipantFormDialogContent({ event, open, onOpenChange }: { event: MarketingEvent | null; open: boolean; onOpenChange: (o: boolean) => void }) {
   const update = useStore((s) => s.update)
   const clients = useStore((s) => s.clients)
   const form = useForm<ParticipantValues>({ resolver: zodResolver(participantSchema) })
@@ -158,7 +159,7 @@ export function ParticipantFormDialog({ event, open, onOpenChange }: { event: Ma
     }
   }, [clientId, clients, form])
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     if (!event) return
     const active = event.participants.filter((p) => p.status !== "annule").length
     if (v.status !== "annule" && active >= event.capacity) {
@@ -172,7 +173,7 @@ export function ParticipantFormDialog({ event, open, onOpenChange }: { event: Ma
     const participant = { ...v, id: uid("pa"), clientId: v.clientId || undefined, company: v.company || undefined, email: v.email || undefined, registeredAt: format(new Date(), "yyyy-MM-dd") }
     const participants = [...event.participants, participant]
     const full = participants.filter((p) => p.status !== "annule").length >= event.capacity
-    update("events", event.id, { participants, status: full && event.status === "inscriptions" ? "complet" : event.status })
+    if (!(await update("events", event.id, { participants, status: full && event.status === "inscriptions" ? "complet" : event.status }))) return
     toast.success("Participant inscrit", { description: v.name })
     onOpenChange(false)
   })
@@ -193,3 +194,7 @@ export function ParticipantFormDialog({ event, open, onOpenChange }: { event: Ma
     </FormDialog>
   )
 }
+
+export const EventFormDialog = lazyDialog(EventFormDialogContent)
+
+export const ParticipantFormDialog = lazyDialog(ParticipantFormDialogContent)

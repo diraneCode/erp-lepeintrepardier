@@ -13,6 +13,7 @@ import { cityOptions } from "@/lib/labels"
 import { toISODate } from "@/lib/format"
 import { nextCode, uid, useStore } from "@/lib/store"
 import type { Shop, Warehouse } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const phone = z.string().trim().regex(/^\+?[0-9\s]{8,}$/, "Numéro de téléphone invalide")
 
@@ -28,10 +29,10 @@ const warehouseSchema = z.object({
 })
 type WarehouseValues = z.infer<typeof warehouseSchema>
 
-export function WarehouseFormDialog({ open, onOpenChange, warehouse }: { open: boolean; onOpenChange: (o: boolean) => void; warehouse?: Warehouse }) {
+function WarehouseFormDialogContent({ open, onOpenChange, warehouse }: { open: boolean; onOpenChange: (o: boolean) => void; warehouse?: Warehouse }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
-  const { employeeOptions } = useLookups()
+  const { employeeOptions } = useLookups(["employeeOptions"])
   const form = useForm<WarehouseValues>({ resolver: zodResolver(warehouseSchema) })
   React.useEffect(() => {
     if (open)
@@ -47,13 +48,13 @@ export function WarehouseFormDialog({ open, onOpenChange, warehouse }: { open: b
       })
   }, [open, warehouse, form])
 
-  const onSubmit = form.handleSubmit((v) => {
-    if (warehouse) update("warehouses", warehouse.id, v)
+  const onSubmit = form.handleSubmit(async (v) => {
+    if (warehouse) {
+      if (!(await update("warehouses", warehouse.id, v))) return
+    }
     else {
       const id = uid("w")
-      add("warehouses", { ...v, id, code: nextCode(v.type === "entrepot" ? "ENT" : "DEP", useStore.getState().warehouses.map((w) => w.code), 3), createdAt: toISODate(new Date()) })
-      // Initialise les niveaux de stock à zéro pour le nouveau site
-      useStore.setState((s) => ({ stockLevels: [...s.stockLevels, ...s.products.map((p) => ({ id: uid("sl"), productId: p.id, locationId: id, quantity: 0 }))] }))
+      if (!(await add("warehouses", { ...v, id, code: nextCode(v.type === "entrepot" ? "ENT" : "DEP", useStore.getState().warehouses.map((w) => w.code), 3), createdAt: toISODate(new Date()) }))) return
     }
     toast.success(warehouse ? "Magasin mis à jour" : "Magasin créé", { description: v.name })
     onOpenChange(false)
@@ -89,10 +90,10 @@ const shopSchema = z.object({
 })
 type ShopValues = z.infer<typeof shopSchema>
 
-export function ShopFormDialog({ open, onOpenChange, shop }: { open: boolean; onOpenChange: (o: boolean) => void; shop?: Shop }) {
+function ShopFormDialogContent({ open, onOpenChange, shop }: { open: boolean; onOpenChange: (o: boolean) => void; shop?: Shop }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
-  const { employeeOptions, warehouseOptions } = useLookups()
+  const { employeeOptions, warehouseOptions } = useLookups(["employeeOptions", "warehouseOptions"])
   const form = useForm<ShopValues>({ resolver: zodResolver(shopSchema) })
   React.useEffect(() => {
     if (open)
@@ -110,12 +111,13 @@ export function ShopFormDialog({ open, onOpenChange, shop }: { open: boolean; on
       })
   }, [open, shop, form])
 
-  const onSubmit = form.handleSubmit((v) => {
-    if (shop) update("shops", shop.id, v)
+  const onSubmit = form.handleSubmit(async (v) => {
+    if (shop) {
+      if (!(await update("shops", shop.id, v))) return
+    }
     else {
       const id = uid("s")
-      add("shops", { ...v, id, code: nextCode("BTQ", useStore.getState().shops.map((s) => s.code), 3) })
-      useStore.setState((s) => ({ stockLevels: [...s.stockLevels, ...s.products.map((p) => ({ id: uid("sl"), productId: p.id, locationId: id, quantity: 0 }))] }))
+      if (!(await add("shops", { ...v, id, code: nextCode("BTQ", useStore.getState().shops.map((s) => s.code), 3) }))) return
     }
     toast.success(shop ? "Boutique mise à jour" : "Boutique créée", { description: v.name })
     onOpenChange(false)
@@ -138,3 +140,7 @@ export function ShopFormDialog({ open, onOpenChange, shop }: { open: boolean; on
     </FormDialog>
   )
 }
+
+export const WarehouseFormDialog = lazyDialog(WarehouseFormDialogContent)
+
+export const ShopFormDialog = lazyDialog(ShopFormDialogContent)

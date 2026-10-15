@@ -81,7 +81,7 @@ function CampaignsTab({ onEdit }: { onEdit?: (c: Campaign) => void }) {
   const campaigns = useStore((s) => s.campaigns)
   const update = useStore((s) => s.update)
   const remove = useStore((s) => s.remove)
-  const { employeeName, employeeOptions } = useLookups()
+  const { employeeName, employeeOptions } = useLookups(["employeeName", "employeeOptions"])
   const [toDelete, setToDelete] = useTransientState<string[] | null>(null)
 
   const config = React.useMemo<FilterConfig<Campaign>>(
@@ -196,8 +196,8 @@ function CampaignsTab({ onEdit }: { onEdit?: (c: Campaign) => void }) {
               <RowActions
                 actions={[
                   { label: "Modifier", icon: LuPencil, onSelect: () => onEdit(c) },
-                  { label: "Lancer", icon: LuPlay, onSelect: () => { update("campaigns", c.id, { status: "en_cours" }); toast.success("Campagne lancée") }, hidden: !["brouillon", "planifiee", "suspendue"].includes(c.status) },
-                  { label: "Suspendre", icon: LuPause, onSelect: () => { update("campaigns", c.id, { status: "suspendue" }); toast.success("Campagne suspendue") }, hidden: c.status !== "en_cours" },
+                  { label: "Lancer", icon: LuPlay, onSelect: () => { void update("campaigns", c.id, { status: "en_cours" }).then((ok) => ok && toast.success("Campagne lancée")) }, hidden: !["brouillon", "planifiee", "suspendue"].includes(c.status) },
+                  { label: "Suspendre", icon: LuPause, onSelect: () => { void update("campaigns", c.id, { status: "suspendue" }).then((ok) => ok && toast.success("Campagne suspendue")) }, hidden: c.status !== "en_cours" },
                   { label: "Supprimer", icon: LuTrash2, destructive: true, separatorBefore: true, onSelect: () => setToDelete([c.id]) },
                 ]}
               />
@@ -211,8 +211,10 @@ function CampaignsTab({ onEdit }: { onEdit?: (c: Campaign) => void }) {
         title={`Supprimer ${toDelete?.length ?? 0} campagne(s) ?`}
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("campaigns", toDelete)
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("campaigns", toDelete))) return
+          }
           toast.success("Campagne(s) supprimée(s)")
           setToDelete(null)
         }}
@@ -225,7 +227,7 @@ function PromotionsTab({ onEdit }: { onEdit?: (p: Promotion) => void }) {
   const promotions = useStore((s) => s.promotions)
   const update = useStore((s) => s.update)
   const remove = useStore((s) => s.remove)
-  const { categoryName, categoryOptions } = useLookups()
+  const { categoryName, categoryOptions } = useLookups(["categoryName", "categoryOptions"])
   const [toDelete, setToDelete] = useTransientState<string[] | null>(null)
   const today = toISODate(new Date())
   const state = (p: Promotion) => (!p.active ? "inactive" : p.endDate < today ? "expiree" : p.startDate > today ? "a_venir" : "en_cours")
@@ -279,7 +281,7 @@ function PromotionsTab({ onEdit }: { onEdit?: (p: Promotion) => void }) {
       exportType: false,
       cell: (p) => (
         <div onClick={(e) => e.stopPropagation()}>
-          <Switch disabled={!onEdit} checked={p.active} onCheckedChange={(v) => { update("promotions", p.id, { active: v }); toast.success(v ? "Promotion activée" : "Promotion désactivée", { description: p.code }) }} aria-label="Activer" />
+          <Switch disabled={!onEdit} checked={p.active} onCheckedChange={(v) => { void update("promotions", p.id, { active: v }).then((ok) => ok && toast.success(v ? "Promotion activée" : "Promotion désactivée", { description: p.code })) }} aria-label="Activer" />
         </div>
       ),
     },
@@ -322,8 +324,10 @@ function PromotionsTab({ onEdit }: { onEdit?: (p: Promotion) => void }) {
         title="Supprimer cette promotion ?"
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("promotions", toDelete)
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("promotions", toDelete))) return
+          }
           toast.success("Promotion supprimée")
           setToDelete(null)
         }}

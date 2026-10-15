@@ -14,6 +14,7 @@ import { useLookups } from "@/hooks/use-lookups"
 import { useCurrentUser, useModuleAccess, useScopedClientOptions } from "@/hooks/use-access"
 import { nextNumber, uid, useStore } from "@/lib/store"
 import type { Invoice } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const schema = z
   .object({
@@ -38,10 +39,10 @@ const defaults = (inv?: Invoice): FormValues => ({
   notes: inv?.notes ?? "",
 })
 
-export function InvoiceFormDialog({ open, onOpenChange, invoice }: { open: boolean; onOpenChange: (o: boolean) => void; invoice?: Invoice }) {
+function InvoiceFormDialogContent({ open, onOpenChange, invoice }: { open: boolean; onOpenChange: (o: boolean) => void; invoice?: Invoice }) {
   const createInvoice = useStore((s) => s.createInvoice)
   const update = useStore((s) => s.update)
-  const { shopOptions: allShops } = useLookups()
+  const { shopOptions: allShops } = useLookups(["shopOptions"])
   const clientOptions = useScopedClientOptions()
   const acc = useModuleAccess("facturation")
   const me = useCurrentUser()
@@ -53,13 +54,13 @@ export function InvoiceFormDialog({ open, onOpenChange, invoice }: { open: boole
     if (open) form.reset({ ...defaults(invoice), boutiqueId: invoice?.boutiqueId ?? (!acc.global && myShop ? myShop.value : "") })
   }, [open, invoice, form, acc.global, myShop])
 
-  const onSubmit = form.handleSubmit((values) => {
+  const onSubmit = form.handleSubmit(async (values) => {
     if (invoice) {
-      update("invoices", invoice.id, values)
+      if (!(await update("invoices", invoice.id, values))) return
       toast.success("Facture mise à jour", { description: invoice.number })
     } else {
       const number = nextNumber("FAC", useStore.getState().invoices)
-      createInvoice({ ...values, id: uid("f"), number, amountPaid: 0 })
+      if (!(await createInvoice({ ...values, id: uid("f"), number, amountPaid: 0 }))) return
       toast.success(values.status === "brouillon" ? "Brouillon enregistré" : "Facture émise", { description: number })
     }
     onOpenChange(false)
@@ -93,3 +94,5 @@ export function InvoiceFormDialog({ open, onOpenChange, invoice }: { open: boole
     </FormDialog>
   )
 }
+
+export const InvoiceFormDialog = lazyDialog(InvoiceFormDialogContent)

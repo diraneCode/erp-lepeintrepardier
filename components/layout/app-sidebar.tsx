@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useMemo } from "react"
 import { LuChevronsUpDown, LuLogOut, LuUserCog } from "react-icons/lu"
 
 import {
@@ -30,24 +29,19 @@ import {
 import { Logo, LogoMark } from "@/components/layout/logo"
 import { UserAvatar } from "@/components/shared/user-avatar"
 import { findNavItem, visibleNav } from "@/lib/nav"
-import { useAccess, useScopedData } from "@/hooks/use-access"
-import { useStore } from "@/lib/store"
-import { invoiceStatus } from "@/lib/calc"
+import { useAccess } from "@/hooks/use-access"
+import { useNavCounters, useStore } from "@/lib/store"
 
-function useNavBadges() {
-  const leaves = useStore((s) => s.leaves)
-  const { invoices, stockLevels: levels, expenses, followups } = useScopedData()
-  const products = useStore((s) => s.products)
-  return useMemo(() => {
-    const min = new Map(products.map((p) => [p.id, p.minStock]))
-    return {
-      "/rh/conges": leaves.filter((l) => l.status === "en_attente").length,
-      "/facturation": invoices.filter((i) => invoiceStatus(i) === "en_retard").length,
-      "/stock": levels.filter((l) => l.quantity <= (min.get(l.productId) ?? 0)).length,
-      "/depenses": expenses.filter((e) => e.status === "en_attente").length,
-      "/commercial/relances": followups.filter((f) => (f.status === "a_faire" || f.status === "reporte") && f.dueDate <= new Date().toISOString().slice(0, 10)).length,
-    } as Record<string, number>
-  }, [leaves, invoices, levels, products, expenses, followups])
+/** Compteurs des menus (demandes en attente, retards…), calculés par la base. */
+function useNavBadges(): Record<string, number> {
+  const c = useNavCounters()
+  return {
+    "/rh/conges": c?.leaves ?? 0,
+    "/facturation": c?.invoices ?? 0,
+    "/stock": c?.stock ?? 0,
+    "/depenses": c?.expenses ?? 0,
+    "/commercial/relances": c?.followups ?? 0,
+  }
 }
 
 export function AppSidebar() {
@@ -120,9 +114,10 @@ export function AppSidebar() {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   variant="destructive"
-                  onSelect={() => {
-                    logout()
+                  onSelect={async () => {
+                    await logout()
                     router.replace("/login")
+                    router.refresh()
                   }}
                 >
                   <LuLogOut /> Se déconnecter

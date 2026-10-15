@@ -33,10 +33,10 @@ type Row = Payslip & ReturnType<typeof computePayslip> & { name: string; matricu
 
 export default function PayrollPage() {
   const payslips = useStore((s) => s.payslips)
-  const update = useStore((s) => s.update)
+  const updateMany = useStore((s) => s.updateMany)
   const generate = useStore((s) => s.generatePayslips)
   const acc = useModuleAccess("rh_paie")
-  const { employeeById, employeeOptions } = useLookups()
+  const { employeeById, employeeOptions } = useLookups(["employeeById", "employeeOptions"])
   const [editing, setEditing] = useTransientState<Row | null>(null)
   const [viewing, setViewing] = useTransientState<Row | null>(null)
 
@@ -99,8 +99,8 @@ export default function PayrollPage() {
     if (e) void downloadPayslip(r, e)
   }
 
-  const setStatus = (ids: string[], status: Payslip["status"]) => {
-    ids.forEach((id) => update("payslips", id, { status, paidAt: status === "paye" ? toISODate(new Date()) : undefined }))
+  const setStatus = async (ids: string[], status: Payslip["status"]) => {
+    if (!(await updateMany("payslips", ids, { status, paidAt: status === "paye" ? toISODate(new Date()) : undefined }))) return
     toast.success(`${ids.length} bulletin(s) → ${payslipStatus[status].label}`)
   }
 
@@ -126,8 +126,9 @@ export default function PayrollPage() {
         description="Préparation, validation et paiement de la paie mensuelle."
         actions={
           acc.write && <Button
-            onClick={() => {
-              const n = generate(currentPeriod)
+            onClick={async () => {
+              const n = await generate(currentPeriod)
+              if (n < 0) return
               toast[n ? "success" : "info"](n ? `${n} bulletin(s) générés` : "Tous les bulletins du mois existent déjà", { description: capitalize(formatMonth(currentPeriod)) })
               filters.setFacet("period", [currentPeriod])
             }}

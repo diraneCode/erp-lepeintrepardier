@@ -15,6 +15,7 @@ import { formatDuration } from "@/lib/format"
 import { attendanceStatus, toOptions } from "@/lib/labels"
 import { useStore } from "@/lib/store"
 import type { Attendance } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Format HH:MM")
 
@@ -36,10 +37,10 @@ const schema = z
   })
 type FormValues = z.infer<typeof schema>
 
-export function AttendanceFormDialog({ open, onOpenChange, record }: { open: boolean; onOpenChange: (o: boolean) => void; record?: Partial<Attendance> }) {
+function AttendanceFormDialogContent({ open, onOpenChange, record }: { open: boolean; onOpenChange: (o: boolean) => void; record?: Partial<Attendance> }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
-  const { employeeOptions } = useLookups()
+  const { employeeOptions } = useLookups(["employeeOptions"])
   const form = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   React.useEffect(() => {
@@ -59,12 +60,13 @@ export function AttendanceFormDialog({ open, onOpenChange, record }: { open: boo
   const worked = workedMinutes({ checkIn: checkIn || null, checkOut: checkOut || null, breakMinutes: Number.isFinite(breakMinutes) ? breakMinutes : 0 })
   const working = status === "present" || status === "retard" || status === "mission"
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     const payload = { ...v, checkIn: working ? v.checkIn || null : null, checkOut: working ? v.checkOut || null : null, breakMinutes: working ? v.breakMinutes : 0 }
     const existing = useStore.getState().attendance.find((a) => a.employeeId === v.employeeId && a.date === v.date)
     const id = record?.id ?? existing?.id
-    if (id) update("attendance", id, payload)
-    else add("attendance", { ...payload, id: `pt_${v.employeeId}_${v.date}` })
+    if (id) {
+      if (!(await update("attendance", id, payload))) return
+    } else if (!(await add("attendance", { ...payload, id: `pt_${v.employeeId}_${v.date}` }))) return
     toast.success(id ? "Pointage mis à jour" : "Pointage enregistré")
     onOpenChange(false)
   })
@@ -88,3 +90,5 @@ export function AttendanceFormDialog({ open, onOpenChange, record }: { open: boo
     </FormDialog>
   )
 }
+
+export const AttendanceFormDialog = lazyDialog(AttendanceFormDialogContent)

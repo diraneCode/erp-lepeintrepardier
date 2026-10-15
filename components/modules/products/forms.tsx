@@ -15,6 +15,7 @@ import { formatMoney, formatPercent, toISODate } from "@/lib/format"
 import { productUnit, toOptions } from "@/lib/labels"
 import { uid, useStore } from "@/lib/store"
 import type { Category, Product } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const productSchema = z
   .object({
@@ -73,10 +74,10 @@ const productDefaults = (p?: Product): ProductValues => ({
   description: p?.description ?? "",
 })
 
-export function ProductFormDialog({ open, onOpenChange, product }: { open: boolean; onOpenChange: (o: boolean) => void; product?: Product }) {
+function ProductFormDialogContent({ open, onOpenChange, product }: { open: boolean; onOpenChange: (o: boolean) => void; product?: Product }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
-  const { categoryOptions } = useLookups()
+  const { categoryOptions } = useLookups(["categoryOptions"])
   const form = useForm<ProductValues>({ resolver: zodResolver(productSchema), defaultValues: productDefaults(product) })
   React.useEffect(() => {
     if (open) form.reset(productDefaults(product))
@@ -84,7 +85,7 @@ export function ProductFormDialog({ open, onOpenChange, product }: { open: boole
   const [pp, sp, hasPromo, promo] = useWatch({ control: form.control, name: ["purchasePrice", "salePrice", "hasPromo", "promoPrice"] })
   const margin = Number.isFinite(pp) && Number.isFinite(sp) && sp > 0 ? sp - pp : null
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     if (useStore.getState().products.some((p) => p.sku === v.sku && p.id !== product?.id)) {
       form.setError("sku", { message: "Cette référence existe déjà" })
       return
@@ -100,8 +101,9 @@ export function ProductFormDialog({ open, onOpenChange, product }: { open: boole
       promoEndDate: hasPromo ? promoEndDate : undefined,
       expiryDate: expiryDate || undefined,
     }
-    if (product) update("products", product.id, payload)
-    else add("products", { ...payload, id: uid("p"), createdAt: toISODate(new Date()) })
+    if (product) {
+      if (!(await update("products", product.id, payload))) return
+    } else if (!(await add("products", { ...payload, id: uid("p"), createdAt: toISODate(new Date()) }))) return
     toast.success(product ? "Produit mis à jour" : "Produit créé", { description: v.name })
     onOpenChange(false)
   })
@@ -173,7 +175,7 @@ const categorySchema = z.object({
 })
 type CategoryValues = z.infer<typeof categorySchema>
 
-export function CategoryFormDialog({ open, onOpenChange, category }: { open: boolean; onOpenChange: (o: boolean) => void; category?: Category }) {
+function CategoryFormDialogContent({ open, onOpenChange, category }: { open: boolean; onOpenChange: (o: boolean) => void; category?: Category }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
   const form = useForm<CategoryValues>({ resolver: zodResolver(categorySchema) })
@@ -182,9 +184,10 @@ export function CategoryFormDialog({ open, onOpenChange, category }: { open: boo
   }, [open, category, form])
   const color = useWatch({ control: form.control, name: "color" })
 
-  const onSubmit = form.handleSubmit((v) => {
-    if (category) update("categories", category.id, v)
-    else add("categories", { ...v, id: uid("c") })
+  const onSubmit = form.handleSubmit(async (v) => {
+    if (category) {
+      if (!(await update("categories", category.id, v))) return
+    } else if (!(await add("categories", { ...v, id: uid("c") }))) return
     toast.success(category ? "Catégorie mise à jour" : "Catégorie créée", { description: v.name })
     onOpenChange(false)
   })
@@ -202,3 +205,7 @@ export function CategoryFormDialog({ open, onOpenChange, category }: { open: boo
     </FormDialog>
   )
 }
+
+export const ProductFormDialog = lazyDialog(ProductFormDialogContent)
+
+export const CategoryFormDialog = lazyDialog(CategoryFormDialogContent)

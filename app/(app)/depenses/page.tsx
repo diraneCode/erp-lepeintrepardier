@@ -29,13 +29,13 @@ import { useStore } from "@/lib/store"
 import type { Expense, ExpenseCategory } from "@/lib/types"
 
 export default function ExpensesPage() {
-  const { expenses } = useScopedData()
+  const { expenses } = useScopedData(["expenses"])
   const allExpenses = useStore((s) => s.expenses)
   const acc = useModuleAccess("depenses")
   const canApprove = acc.global && acc.write
   const remove = useStore((s) => s.remove)
   const setStatus = useStore((s) => s.setExpenseStatus)
-  const { locationName, employeeName, locationOptions, employeeOptions } = useLookups()
+  const { locationName, employeeName, locationOptions, employeeOptions } = useLookups(["locationName", "employeeName", "locationOptions", "employeeOptions"])
   const [formOpen, setFormOpen] = useTransientState(false)
   const [editing, setEditing] = useTransientState<Expense | undefined>(undefined)
   const [toDelete, setToDelete] = useTransientState<string[] | null>(null)
@@ -100,8 +100,8 @@ export default function ExpensesPage() {
     setEditing(e)
     setFormOpen(true)
   }
-  const changeStatus = (ids: string[], status: Expense["status"]) => {
-    setStatus(ids, status)
+  const changeStatus = async (ids: string[], status: Expense["status"]) => {
+    if (!(await setStatus(ids, status))) return
     toast.success(`${ids.length} dépense(s) → ${expenseStatus[status].label}`, status === "payee" ? { description: "Écritures comptables générées" } : undefined)
   }
 
@@ -205,8 +205,10 @@ export default function ExpensesPage() {
         title="Supprimer cette dépense ?"
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("expenses", toDelete)
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("expenses", toDelete))) return
+          }
           toast.success("Dépense supprimée")
           setToDelete(null)
         }}

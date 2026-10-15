@@ -63,12 +63,12 @@ const endTime = (a: Appointment) => {
 }
 
 export default function AppointmentsPage() {
-  const { appointments, clients, prospects } = useScopedData()
+  const { appointments, clients, prospects } = useScopedData(["appointments", "clients", "prospects"])
   const allProspects = useStore((s) => s.prospects)
   const update = useStore((s) => s.update)
   const remove = useStore((s) => s.remove)
   const acc = useModuleAccess("rendez_vous")
-  const { clientById, employeeName, employeeOptions } = useLookups()
+  const { clientById, employeeName, employeeOptions } = useLookups(["clientById", "employeeName", "employeeOptions"])
 
   const [view, setView] = React.useState<"agenda" | "liste">("agenda")
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }))
@@ -119,8 +119,8 @@ export default function AppointmentsPage() {
     }
   }, [rows, today])
 
-  const setStatus = (r: Appointment, status: Appointment["status"]) => {
-    update("appointments", r.id, { status })
+  const setStatus = async (r: Appointment, status: Appointment["status"]) => {
+    if (!(await update("appointments", r.id, { status }))) return
     toast.success(`Rendez-vous ${appointmentStatus[status].label.toLowerCase()}`, { description: `${r.title} — ${formatDate(r.date)}` })
   }
   const openNew = (p?: AppointmentPreset) => {
@@ -287,8 +287,10 @@ export default function AppointmentsPage() {
         description="Préférez « Annuler » pour garder une trace dans l'historique."
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("appointments", [toDelete])
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("appointments", [toDelete]))) return
+          }
           toast.success("Rendez-vous supprimé")
           setToDelete(null)
           setViewingId(null)

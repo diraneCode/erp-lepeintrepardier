@@ -17,6 +17,7 @@ import { quoteStatus, toOptions } from "@/lib/labels"
 import { nextProformaNumber } from "@/lib/proforma"
 import { uid, useStore } from "@/lib/store"
 import type { LineItem, Quote } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const surfaceSchema = z.object({
   designation: z.string().trim().min(2, "Désignation requise"),
@@ -60,10 +61,10 @@ const defaults = (q?: Quote, ownerId = ""): FormValues => ({
   notes: q?.notes ?? "",
 })
 
-export function QuoteFormDialog({ open, onOpenChange, quote }: { open: boolean; onOpenChange: (o: boolean) => void; quote?: Quote }) {
+function QuoteFormDialogContent({ open, onOpenChange, quote }: { open: boolean; onOpenChange: (o: boolean) => void; quote?: Quote }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
-  const { employeeOptions } = useLookups()
+  const { employeeOptions } = useLookups(["employeeOptions"])
   const clientOptions = useScopedClientOptions()
   const acc = useModuleAccess("devis")
   const me = useCurrentUser()
@@ -73,15 +74,15 @@ export function QuoteFormDialog({ open, onOpenChange, quote }: { open: boolean; 
     if (open) form.reset(defaults(quote, me?.id ?? ""))
   }, [open, quote, form, acc.global, me])
 
-  const onSubmit = form.handleSubmit((values) => {
+  const onSubmit = form.handleSubmit(async (values) => {
     const { applyTax, ...rest } = values
     const items: LineItem[] = values.items.map((i) => ({ ...i, discount: 0, taxRate: applyTax ? 19.25 : 0 }))
     if (quote) {
-      update("quotes", quote.id, { ...rest, items })
+      if (!(await update("quotes", quote.id, { ...rest, items }))) return
       toast.success("Proforma mise à jour", { description: quote.number })
     } else {
       const number = nextProformaNumber(useStore.getState().quotes, new Date(`${values.date}T00:00:00`))
-      add("quotes", { ...rest, items, id: uid("d"), number })
+      if (!(await add("quotes", { ...rest, items, id: uid("d"), number }))) return
       toast.success("Proforma créée", { description: `N° ${number}` })
     }
     onOpenChange(false)
@@ -125,3 +126,5 @@ export function QuoteFormDialog({ open, onOpenChange, quote }: { open: boolean; 
     </FormDialog>
   )
 }
+
+export const QuoteFormDialog = lazyDialog(QuoteFormDialogContent)

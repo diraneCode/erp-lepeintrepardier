@@ -14,6 +14,7 @@ import { cityOptions, clientSegment, leadSource, prospectStatus, toOptions } fro
 import { toISODate } from "@/lib/format"
 import { nextCode, uid, useStore } from "@/lib/store"
 import type { Prospect } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const schema = z
   .object({
@@ -35,10 +36,10 @@ const schema = z
   .refine((v) => v.status !== "perdu" || (v.lostReason ?? "").trim().length >= 3, { path: ["lostReason"], message: "Indiquez la raison de la perte" })
 type FormValues = z.infer<typeof schema>
 
-export function ProspectFormDialog({ open, onOpenChange, prospect }: { open: boolean; onOpenChange: (o: boolean) => void; prospect?: Prospect }) {
+function ProspectFormDialogContent({ open, onOpenChange, prospect }: { open: boolean; onOpenChange: (o: boolean) => void; prospect?: Prospect }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
-  const { employeeOptions } = useLookups()
+  const { employeeOptions } = useLookups(["employeeOptions"])
   const acc = useModuleAccess("prospects")
   const me = useCurrentUser()
   const form = useForm<FormValues>({ resolver: zodResolver(schema) })
@@ -65,14 +66,14 @@ export function ProspectFormDialog({ open, onOpenChange, prospect }: { open: boo
 
   const status = useWatch({ control: form.control, name: "status" })
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     const payload = { ...v, lostReason: v.status === "perdu" ? v.lostReason : undefined, nextAction: v.nextAction || undefined }
     if (prospect) {
-      update("prospects", prospect.id, payload)
+      if (!(await update("prospects", prospect.id, payload))) return
       toast.success("Prospect mis à jour", { description: v.name })
     } else {
       const code = nextCode("PRO", useStore.getState().prospects.map((p) => p.code))
-      add("prospects", { ...payload, id: uid("pp"), code, createdAt: toISODate(new Date()) })
+      if (!(await add("prospects", { ...payload, id: uid("pp"), code, createdAt: toISODate(new Date()) }))) return
       toast.success("Prospect créé", { description: `${v.name} (${code})` })
     }
     onOpenChange(false)
@@ -110,3 +111,5 @@ export function ProspectFormDialog({ open, onOpenChange, prospect }: { open: boo
     </FormDialog>
   )
 }
+
+export const ProspectFormDialog = lazyDialog(ProspectFormDialogContent)

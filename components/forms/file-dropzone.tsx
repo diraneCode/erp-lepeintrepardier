@@ -6,18 +6,27 @@ import { LuEye, LuFileText, LuImage, LuRefreshCw, LuUpload, LuX } from "react-ic
 
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import { formatFileSize, openFile, saveFile, useFileUrl } from "@/lib/files"
+import { FileTooLargeError, MAX_IMAGE_INPUT_SIZE, MAX_STORED_SIZE, formatFileSize, openFile, saveFile, useFileUrl } from "@/lib/files"
 import type { StoredFile } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 export const IMAGE_ACCEPT: Accept = { "image/jpeg": [".jpg", ".jpeg"], "image/png": [".png"], "image/webp": [".webp"] }
 export const DOC_ACCEPT: Accept = { "application/pdf": [".pdf"], ...IMAGE_ACCEPT }
 
-const MAX_SIZE = 5 * 1024 * 1024
+const TOO_LARGE_PDF = "pdf-too-large"
+
+/** Les PDF sont limités à 5 Mo ; les images (compressées avant envoi) jusqu'à 20 Mo. */
+function sizeValidator(file: File) {
+  if (!file.type.startsWith("image/") && file.size > MAX_STORED_SIZE) {
+    return { code: TOO_LARGE_PDF, message: "PDF trop volumineux" }
+  }
+  return null
+}
 
 function rejectionMessage(rejections: FileRejection[]) {
   const code = rejections[0]?.errors[0]?.code
-  if (code === "file-too-large") return `Fichier trop volumineux (maximum ${formatFileSize(MAX_SIZE)})`
+  if (code === TOO_LARGE_PDF) return `PDF trop volumineux (maximum ${formatFileSize(MAX_STORED_SIZE)}). Réduisez-le ou numérisez-le en image.`
+  if (code === "file-too-large") return `Fichier trop volumineux (maximum ${formatFileSize(MAX_IMAGE_INPUT_SIZE)})`
   if (code === "file-invalid-type") return "Format non accepté"
   if (code === "too-many-files") return "Un seul fichier à la fois"
   return "Fichier refusé"
@@ -34,7 +43,13 @@ export function FileDropzone({
   invalid,
   error,
   required,
+  folder,
+  kind,
 }: {
+  /** Dossier de destination dans le stockage (ex. employees/<id>) */
+  folder: string
+  /** Type de pièce, utilisé dans le nom du fichier */
+  kind: string
   value?: StoredFile
   onChange: (file: StoredFile | undefined) => void
   label: string
@@ -60,15 +75,21 @@ export function FileDropzone({
       setRejected(null)
       setBusy(true)
       try {
-        onChange(await saveFile(accepted[0]))
+        onChange(await saveFile(accepted[0], folder, kind))
+      } catch (e) {
+        setRejected(
+          e instanceof FileTooLargeError
+            ? `Fichier trop volumineux même après compression (maximum ${formatFileSize(MAX_STORED_SIZE)})`
+            : "Envoi du fichier impossible. Vérifiez votre connexion et réessayez."
+        )
       } finally {
         setBusy(false)
       }
     },
-    [onChange]
+    [onChange, folder, kind]
   )
 
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({ onDrop, accept, maxSize: MAX_SIZE, maxFiles: 1, multiple: false, noClick: !!value })
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({ onDrop, accept, maxSize: MAX_IMAGE_INPUT_SIZE, validator: sizeValidator, maxFiles: 1, multiple: false, noClick: !!value })
   const message = rejected ?? error
 
   return (
@@ -90,7 +111,7 @@ export function FileDropzone({
         <input {...getInputProps()} />
         {busy ? (
           <div className="flex w-full items-center justify-center gap-2 text-muted-foreground">
-            <Spinner /> Enregistrement…
+            <Spinner /> Compression et envoi…
           </div>
         ) : value ? (
           <>
@@ -107,7 +128,7 @@ export function FileDropzone({
               <div className="text-xs text-muted-foreground">{formatFileSize(value.size)}</div>
             </div>
             <div className="flex shrink-0 gap-1">
-              <Button type="button" variant="ghost" size="icon-sm" aria-label="Ouvrir" onClick={() => void openFile(value)}>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label="Ouvrir" onClick={() => void openFile(value).then((ok) => !ok && setRejected("Fichier inaccessible"))}>
                 <LuEye />
               </Button>
               <Button type="button" variant="ghost" size="icon-sm" aria-label="Remplacer" onClick={open}>

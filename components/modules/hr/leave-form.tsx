@@ -14,6 +14,7 @@ import { ANNUAL_LEAVE_DAYS, businessDaysBetween } from "@/lib/calc"
 import { leaveType, toOptions } from "@/lib/labels"
 import { uid, useStore } from "@/lib/store"
 import type { Leave } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const schema = z
   .object({
@@ -33,7 +34,7 @@ export function annualTaken(leaves: Leave[], employeeId: string, year: string, e
     .reduce((s, l) => s + l.days, 0)
 }
 
-export function LeaveFormDialog({
+function LeaveFormDialogContent({
   open,
   onOpenChange,
   leave,
@@ -48,7 +49,7 @@ export function LeaveFormDialog({
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
   const leaves = useStore((s) => s.leaves)
-  const { employeeOptions } = useLookups()
+  const { employeeOptions } = useLookups(["employeeOptions"])
   const form = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   React.useEffect(() => {
@@ -66,7 +67,7 @@ export function LeaveFormDialog({
   const days = start && end ? businessDaysBetween(start, end) : 0
   const taken = employeeId && start ? annualTaken(leaves, employeeId, start.slice(0, 4), leave?.id) : 0
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     const n = businessDaysBetween(v.startDate, v.endDate)
     const overlap = leaves.some((l) => l.employeeId === v.employeeId && l.id !== leave?.id && (l.status === "approuve" || l.status === "en_attente") && l.startDate <= v.endDate && l.endDate >= v.startDate)
     if (overlap) {
@@ -77,8 +78,9 @@ export function LeaveFormDialog({
       form.setError("endDate", { message: `Solde insuffisant (${ANNUAL_LEAVE_DAYS - taken} j disponibles)` })
       return
     }
-    if (leave) update("leaves", leave.id, { ...v, days: n })
-    else add("leaves", { ...v, id: uid("l"), days: n, status: "en_attente", requestedAt: format(new Date(), "yyyy-MM-dd") })
+    if (leave) {
+      if (!(await update("leaves", leave.id, { ...v, days: n }))) return
+    } else if (!(await add("leaves", { ...v, id: uid("l"), days: n, status: "en_attente", requestedAt: format(new Date(), "yyyy-MM-dd") }))) return
     toast.success(leave ? "Demande mise à jour" : "Demande de congé soumise", { description: `${n} jour(s) ouvré(s)` })
     onOpenChange(false)
   })
@@ -109,3 +111,5 @@ export function LeaveFormDialog({
     </FormDialog>
   )
 }
+
+export const LeaveFormDialog = lazyDialog(LeaveFormDialogContent)

@@ -82,7 +82,8 @@ export default function LeavesPage() {
 function RequestsTab({ onEdit }: { onEdit: (l: Leave) => void }) {
   const leaves = useStore((s) => s.leaves)
   const setLeaveStatus = useStore((s) => s.setLeaveStatus)
-  const { employeeName, employeeById, employeeOptions } = useLookups()
+  const updateMany = useStore((s) => s.updateMany)
+  const { employeeName, employeeById, employeeOptions } = useLookups(["employeeName", "employeeById", "employeeOptions"])
   const [deciding, setDeciding] = useTransientState<{ leave: Leave; status: "approuve" | "refuse" } | null>(null)
   const [comment, setComment] = React.useState("")
   const today = toISODate(new Date())
@@ -111,9 +112,9 @@ function RequestsTab({ onEdit }: { onEdit: (l: Leave) => void }) {
     days: data.filter((l) => l.status === "approuve").reduce((s, l) => s + l.days, 0),
   }
 
-  const decide = () => {
+  const decide = async () => {
     if (!deciding) return
-    setLeaveStatus(deciding.leave.id, deciding.status, comment.trim() || undefined)
+    if (!(await setLeaveStatus(deciding.leave.id, deciding.status, comment.trim() || undefined))) return
     toast.success(deciding.status === "approuve" ? "Congé approuvé" : "Demande refusée", { description: employeeName(deciding.leave.employeeId) })
     setDeciding(null)
     setComment("")
@@ -153,9 +154,9 @@ function RequestsTab({ onEdit }: { onEdit: (l: Leave) => void }) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
+                onClick={async () => {
                   const pending = sel.filter((l) => l.status === "en_attente")
-                  pending.forEach((l) => setLeaveStatus(l.id, "approuve"))
+                  if (!(await updateMany("leaves", pending.map((l) => l.id), { status: "approuve", approverId: useStore.getState().currentUserId ?? undefined }))) return
                   toast.success(`${pending.length} demande(s) approuvée(s)`)
                   clear()
                 }}
@@ -169,7 +170,7 @@ function RequestsTab({ onEdit }: { onEdit: (l: Leave) => void }) {
                   { label: "Approuver", icon: LuCheck, onSelect: () => setDeciding({ leave: l, status: "approuve" }), hidden: l.status !== "en_attente" },
                   { label: "Refuser", icon: LuX, onSelect: () => setDeciding({ leave: l, status: "refuse" }), hidden: l.status !== "en_attente" },
                   { label: "Modifier", icon: LuPencil, onSelect: () => onEdit(l), hidden: l.status !== "en_attente" },
-                  { label: "Annuler", icon: LuX, destructive: true, separatorBefore: true, onSelect: () => { setLeaveStatus(l.id, "annule"); toast.success("Demande annulée") }, hidden: l.status === "annule" || l.status === "refuse" || l.endDate < today },
+                  { label: "Annuler", icon: LuX, destructive: true, separatorBefore: true, onSelect: () => { void setLeaveStatus(l.id, "annule").then((ok) => ok && toast.success("Demande annulée")) }, hidden: l.status === "annule" || l.status === "refuse" || l.endDate < today },
                 ]}
               />
             )}
@@ -203,7 +204,7 @@ function RequestsTab({ onEdit }: { onEdit: (l: Leave) => void }) {
 function BalancesTab() {
   const employees = useStore((s) => s.employees)
   const leaves = useStore((s) => s.leaves)
-  const { locationName, locationOptions } = useLookups()
+  const { locationName, locationOptions } = useLookups(["locationName", "locationOptions"])
   const year = new Date().getFullYear().toString()
 
   const rows = React.useMemo(
@@ -278,7 +279,7 @@ function BalancesTab() {
 
 function PlanningTab() {
   const leaves = useStore((s) => s.leaves)
-  const { employeeName } = useLookups()
+  const { employeeName } = useLookups(["employeeName"])
   const start = new Date()
   const days = eachDayOfInterval({ start, end: addDays(start, 44) })
   const from = toISODate(days[0])

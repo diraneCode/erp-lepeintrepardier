@@ -16,6 +16,7 @@ import { formatMoney } from "@/lib/format"
 import { MONTHS_FR, monthTarget } from "@/lib/targets"
 import { useStore } from "@/lib/store"
 import type { Shop } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const amount = z.number({ error: "Montant requis" }).min(0, "Doit être positif").max(10_000_000_000, "Montant trop élevé")
 const schema = z.object({
@@ -25,7 +26,7 @@ const schema = z.object({
 })
 type FormValues = z.infer<typeof schema>
 
-export function ShopTargetsDialog({
+function ShopTargetsDialogContent({
   open,
   onOpenChange,
   shops,
@@ -69,11 +70,11 @@ export function ShopTargetsDialog({
 
   const total = (months ?? []).reduce((s, v) => s + (Number.isFinite(v) ? v : 0), 0)
 
-  const onSubmit = form.handleSubmit((v) => {
-    setShopTargets(
+  const onSubmit = form.handleSubmit(async (v) => {
+    if (!(await setShopTargets(
       v.shopId,
       v.months.map((amount, i) => ({ period: `${v.year}-${String(i + 1).padStart(2, "0")}`, amount: Math.round(amount) }))
-    )
+    ))) return
     toast.success("Objectifs enregistrés", { description: `${shops.find((s) => s.id === v.shopId)?.name} · ${v.year}` })
     onOpenChange(false)
   })
@@ -122,3 +123,5 @@ export function ShopTargetsDialog({
     </FormDialog>
   )
 }
+
+export const ShopTargetsDialog = lazyDialog(ShopTargetsDialogContent)

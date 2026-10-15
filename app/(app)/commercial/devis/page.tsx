@@ -49,13 +49,14 @@ type Row = Quote & { total: number; expired: boolean }
 
 export default function QuotesPage() {
   const router = useRouter()
-  const { quotes, clients: scopedClients } = useScopedData()
+  const { quotes, clients: scopedClients } = useScopedData(["quotes", "clients"])
   const acc = useModuleAccess("devis")
   const update = useStore((s) => s.update)
+  const updateMany = useStore((s) => s.updateMany)
   const add = useStore((s) => s.add)
   const remove = useStore((s) => s.remove)
   const convert = useStore((s) => s.convertQuoteToInvoice)
-  const { clientName, clientById, employeeName, employeeOptions, clientOptions, productById } = useLookups()
+  const { clientName, clientById, employeeName, employeeOptions, clientOptions, productById } = useLookups(["clientName", "clientById", "employeeName", "employeeOptions", "clientOptions", "productById"])
 
   const [formOpen, setFormOpen] = useTransientState(false)
   const [editing, setEditing] = useTransientState<Quote | undefined>(undefined)
@@ -113,14 +114,14 @@ export default function QuotesPage() {
   const downloadPdf = (q: Quote) =>
     exportProformaPDF(toProformaDocument(q, clientById.get(q.clientId), productById)).then(() => toast.success("Proforma PDF générée", { description: `N° ${q.number}` }))
 
-  const duplicate = (q: Quote) => {
+  const duplicate = async (q: Quote) => {
     const number = nextProformaNumber(useStore.getState().quotes)
-    add("quotes", { ...q, id: uid("d"), number, status: "brouillon", date: today, validUntil: toISODate(addDays(new Date(), 30)), invoiceId: undefined })
+    if (!(await add("quotes", { ...q, id: uid("d"), number, status: "brouillon", date: today, validUntil: toISODate(addDays(new Date(), 30)), invoiceId: undefined }))) return
     toast.success("Devis dupliqué", { description: number })
   }
 
-  const toInvoice = (q: Quote) => {
-    const inv = convert(q.id)
+  const toInvoice = async (q: Quote) => {
+    const inv = await convert(q.id)
     if (inv) {
       toast.success("Facture créée", {
         description: inv.number,
@@ -206,8 +207,8 @@ export default function QuotesPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    sel.filter((q) => q.status === "brouillon").forEach((q) => update("quotes", q.id, { status: "envoye" }))
+                  onClick={async () => {
+                    if (!(await updateMany("quotes", sel.filter((q) => q.status === "brouillon").map((q) => q.id), { status: "envoye" }))) return
                     toast.success("Devis marqués comme envoyés")
                     clear()
                   }}
@@ -291,8 +292,10 @@ export default function QuotesPage() {
         description="Cette action est irréversible."
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("quotes", toDelete)
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("quotes", toDelete))) return
+          }
           toast.success("Devis supprimé(s)")
           setToDelete(null)
           setViewing(null)

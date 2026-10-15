@@ -35,13 +35,13 @@ const statusDef = {
 type Row = Warehouse & { units: number; value: number; refs: number; alerts: number; inflow: number; outflow: number; occupancy: number }
 
 export default function WarehousesPage() {
-  const { warehouses } = useScopedData()
+  const { warehouses } = useScopedData(["warehouses"])
   const acc = useModuleAccess("magasins")
   const levels = useStore((s) => s.stockLevels)
   const movements = useStore((s) => s.stockMovements)
   const shops = useStore((s) => s.shops)
   const remove = useStore((s) => s.remove)
-  const { productById, employeeName, employeeOptions } = useLookups()
+  const { productById, employeeName, employeeOptions } = useLookups(["productById", "employeeName", "employeeOptions"])
   const [formOpen, setFormOpen] = useTransientState(false)
   const [editing, setEditing] = useTransientState<Warehouse | undefined>(undefined)
   const [toDelete, setToDelete] = useTransientState<Warehouse | null>(null)
@@ -213,13 +213,12 @@ export default function WarehousesPage() {
         description="Les niveaux de stock de ce site seront supprimés. Les mouvements historiques sont conservés."
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!toDelete) return
           if (shops.some((s) => s.supplyWarehouseId === toDelete.id)) {
             toast.error("Suppression impossible", { description: "Des boutiques sont approvisionnées par ce magasin." })
           } else {
-            remove("warehouses", [toDelete.id])
-            remove("stockLevels", useStore.getState().stockLevels.filter((l) => l.locationId === toDelete.id).map((l) => l.id))
+            if (!(await remove("warehouses", [toDelete.id]))) return
             toast.success("Magasin supprimé")
           }
           setToDelete(null)

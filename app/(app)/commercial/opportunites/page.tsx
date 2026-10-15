@@ -49,11 +49,11 @@ const stageColor: Record<OpportunityStage, string> = {
 }
 
 export default function OpportunitiesPage() {
-  const { opportunities } = useScopedData()
+  const { opportunities } = useScopedData(["opportunities"])
   const acc = useModuleAccess("opportunites")
   const update = useStore((s) => s.update)
   const remove = useStore((s) => s.remove)
-  const { clientName, employeeName, employeeOptions, clientById } = useLookups()
+  const { clientName, employeeName, employeeOptions, clientById } = useLookups(["clientName", "employeeName", "employeeOptions", "clientById"])
 
   const [view, setView] = React.useState<"kanban" | "list">("kanban")
   const [formOpen, setFormOpen] = useTransientState(false)
@@ -89,8 +89,8 @@ export default function OpportunitiesPage() {
     return { pipeline, weighted, won: won.reduce((s, o) => s + o.amount, 0), wonCount: won.length, winRate, openCount: open.length }
   }, [data])
 
-  const moveTo = (o: Opportunity, stage: OpportunityStage) => {
-    update("opportunities", o.id, { stage, probability: STAGE_PROBABILITY[stage] })
+  const moveTo = async (o: Opportunity, stage: OpportunityStage) => {
+    if (!(await update("opportunities", o.id, { stage, probability: STAGE_PROBABILITY[stage] }))) return
     toast.success(`« ${o.title} » → ${opportunityStage[stage].label}`)
   }
   const openEdit = (o?: Opportunity) => {
@@ -311,8 +311,10 @@ export default function OpportunitiesPage() {
         description="Cette action est irréversible."
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("opportunities", toDelete)
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("opportunities", toDelete))) return
+          }
           toast.success("Opportunité(s) supprimée(s)")
           setToDelete(null)
         }}

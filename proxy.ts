@@ -1,28 +1,54 @@
 import { NextResponse, type NextRequest } from "next/server"
+import { createServerClient } from "@supabase/ssr"
 
-import { SESSION_COOKIE } from "@/lib/session"
+import { SUPABASE_ANON_KEY, SUPABASE_URL, isSupabaseConfigured } from "@/lib/supabase/env"
 
 /**
- * Redirige vers /login toute visite sans session (ex. https://erp.pardier.com),
- * et un utilisateur déjà connecté qui revient sur /login vers l'accueil.
+ * Rafraîchit la session Supabase (cookies) puis redirige vers /login toute
+ * visite sans session valide (ex. https://erp.pardier.com), et un utilisateur
+ * déjà connecté qui revient sur /login vers l'accueil.
  */
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl
-  const hasSession = request.cookies.get(SESSION_COOKIE)?.value === "1"
+  let response = NextResponse.next({ request })
 
-  if (pathname === "/login") {
-    if (hasSession) return NextResponse.redirect(new URL("/", request.url))
-    return NextResponse.next()
+  let authenticated = false
+  if (isSupabaseConfigured) {
+    const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      cookies: {
+        getAll: () => request.cookies.getAll(),
+        setAll: (cookies, headers) => {
+          cookies.forEach(({ name, value }) => request.cookies.set(name, value))
+          response = NextResponse.next({ request })
+          cookies.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
+          Object.entries(headers ?? {}).forEach(([k, v]) => response.headers.set(k, v))
+        },
+      },
+    })
+    // Vérifie la signature du jeton (et le renouvelle si nécessaire)
+    const { data } = await supabase.auth.getClaims()
+    authenticated = !!data?.claims?.sub
   }
 
-  if (!hasSession) {
+  const redirect = (url: URL) => {
+    const res = NextResponse.redirect(url)
+    // Conserve les cookies de session éventuellement renouvelés
+    response.cookies.getAll().forEach((c) => res.cookies.set(c))
+    return res
+  }
+
+  if (pathname === "/login") {
+    return authenticated ? redirect(new URL("/", request.url)) : response
+  }
+
+  if (!authenticated) {
     const url = new URL("/login", request.url)
     // Retour à la page demandée après connexion
     if (pathname !== "/") url.searchParams.set("next", `${pathname}${search}`)
-    return NextResponse.redirect(url)
+    return redirect(url)
   }
 
-  return NextResponse.next()
+  return response
 }
 
 export const config = {

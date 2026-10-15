@@ -15,6 +15,7 @@ import { formatNumber } from "@/lib/format"
 import { movementType, toOptions } from "@/lib/labels"
 import { uid, useStore } from "@/lib/store"
 import type { StockMovementType } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const REASONS: Record<StockMovementType, string[]> = {
   entree: ["Réception fournisseur", "Retour client", "Production atelier teinte"],
@@ -49,11 +50,11 @@ export interface MovementPreset {
   locationId?: string
 }
 
-export function MovementFormDialog({ open, onOpenChange, preset }: { open: boolean; onOpenChange: (o: boolean) => void; preset?: MovementPreset }) {
+function MovementFormDialogContent({ open, onOpenChange, preset }: { open: boolean; onOpenChange: (o: boolean) => void; preset?: MovementPreset }) {
   const createMovement = useStore((s) => s.createStockMovement)
   const currentUserId = useStore((s) => s.currentUserId)
   const stockLevels = useStore((s) => s.stockLevels)
-  const { productOptions, locationOptions: allLocations } = useLookups()
+  const { productOptions, locationOptions: allLocations } = useLookups(["productOptions", "locationOptions"])
   const stockAccess = useModuleAccess("stock")
   const me = useCurrentUser()
   // Hors portée globale : seul le site d'affectation est proposé (transfert : destination libre)
@@ -81,13 +82,13 @@ export function MovementFormDialog({ open, onOpenChange, preset }: { open: boole
     if (type && form.formState.dirtyFields.type) form.setValue("reason", REASONS[type][0])
   }, [type, form])
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     if ((v.type === "sortie" || v.type === "transfert") && available !== null && v.quantity > available) {
       form.setError("quantity", { message: `Stock insuffisant (${formatNumber(available)} disponible)` })
       return
     }
     const userId = currentUserId ?? ""
-    createMovement({
+    if (!(await createMovement({
       id: uid("m"),
       date: format(new Date(), "yyyy-MM-dd'T'HH:mm"),
       type: v.type,
@@ -98,7 +99,7 @@ export function MovementFormDialog({ open, onOpenChange, preset }: { open: boole
       reason: v.reason,
       reference: v.reference,
       userId,
-    })
+    }))) return
     toast.success("Mouvement enregistré", { description: `${movementType[v.type].label} · ${v.reference}` })
     onOpenChange(false)
   })
@@ -128,3 +129,5 @@ export function MovementFormDialog({ open, onOpenChange, preset }: { open: boole
     </FormDialog>
   )
 }
+
+export const MovementFormDialog = lazyDialog(MovementFormDialogContent)

@@ -23,6 +23,7 @@ import { useTransientState } from "@/hooks/use-transient-state"
 import { DAILY_MINUTES, WORK_START, lateMinutes, overtimeMinutes, workedMinutes } from "@/lib/calc"
 import { capitalize, formatDate, formatDuration, formatNumber, toISODate } from "@/lib/format"
 import { attendanceStatus, toOptions } from "@/lib/labels"
+import { useSubmitLock } from "@/components/shared/form-dialog"
 import { useStore } from "@/lib/store"
 import type { Attendance, AttendanceStatus } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -64,22 +65,26 @@ export default function MyAttendancePage() {
   const todayRecord = mine.find((a) => a.date === today)
   const onLeave = leaves.some((l) => l.employeeId === user?.id && l.status === "approuve" && l.startDate <= today && l.endDate >= today)
 
-  const clockIn = () => {
+  const clockIn = async () => {
     if (!user) return
     const time = format(new Date(), "HH:mm")
     const [h, m] = WORK_START.split(":").map(Number)
     const late = new Date().getHours() * 60 + new Date().getMinutes() > h * 60 + m + GRACE_MINUTES
     const record: Attendance = { id: `pt_${user.id}_${today}`, employeeId: user.id, date: today, checkIn: time, checkOut: null, breakMinutes: 60, status: late ? "retard" : "present" }
-    if (todayRecord) update("attendance", todayRecord.id, record)
-    else add("attendance", record)
+    if (todayRecord) {
+      if (!(await update("attendance", todayRecord.id, record))) return
+    } else if (!(await add("attendance", record))) return
     log("Pointage", "Mon pointage", `Arrivée à ${time}`)
     toast.success(`Arrivée enregistrée à ${time}`, { description: late ? "Arrivée après 08h10 : comptée en retard." : "Bonne journée !" })
   }
 
-  const clockOut = () => {
+  // Un seul enregistrement même en cas de double clic
+  const clockInLocked = useSubmitLock(clockIn)
+
+  const clockOut = async () => {
     if (!todayRecord) return
     const time = format(new Date(), "HH:mm")
-    update("attendance", todayRecord.id, { checkOut: time })
+    if (!(await update("attendance", todayRecord.id, { checkOut: time }))) return
     log("Pointage", "Mon pointage", `Départ à ${time}`)
     toast.success(`Départ enregistré à ${time}`, { description: `Temps de travail : ${formatDuration(workedMinutes({ ...todayRecord, checkOut: time }))}` })
     setConfirmOut(false)
@@ -154,7 +159,7 @@ export default function MyAttendancePage() {
             </div>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Button size="lg" onClick={clockIn} disabled={!canIn}>
+            <Button size="lg" onClick={() => void clockInLocked.handleSubmit()} disabled={!canIn || clockInLocked.submitting}>
               <LuLogIn /> Pointer mon arrivée
             </Button>
             <Button size="lg" variant="outline" onClick={() => setConfirmOut(true)} disabled={!canOut}>

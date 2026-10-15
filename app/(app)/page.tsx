@@ -53,7 +53,7 @@ export default function HomePage() {
 }
 
 function Dashboard() {
-  const scoped = useScopedData()
+  const scoped = useScopedData(["sales", "invoices", "payments", "clients", "stockLevels", "shops", "opportunities", "followups"])
   const { sales, invoices, payments, clients, stockLevels: levels, shops } = scoped
   const { user, can, access } = useAccess()
   const global = access("dashboard")?.global ?? false
@@ -66,7 +66,7 @@ function Dashboard() {
   const opportunities = can("opportunites") ? scoped.opportunities : NONE_OPPS
   const targets = useStore((s) => s.shopTargets)
   const followupsDue = scoped.followups.filter((f) => (f.status === "a_faire" || f.status === "reporte") && f.dueDate <= toISODate(new Date())).length
-  const { productById, categoryById, shopName, clientName, employeeName } = useLookups()
+  const { productById, categoryById, shopName, clientName, employeeName } = useLookups(["productById", "categoryById", "shopName", "clientName", "employeeName"])
 
   const [range, setRange] = React.useState<DateRange | undefined>(() => DATE_PRESETS.find((p) => p.id === "month")!.range())
   const [preset, setPreset] = React.useState<string | undefined>("month")

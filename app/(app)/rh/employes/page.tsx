@@ -51,8 +51,9 @@ export default function EmployeesPage() {
   const attendance = useStore((s) => s.attendance)
   const leaves = useStore((s) => s.leaves)
   const update = useStore((s) => s.update)
+  const updateMany = useStore((s) => s.updateMany)
   const remove = useStore((s) => s.remove)
-  const { locationName, locationOptions } = useLookups()
+  const { locationName, locationOptions } = useLookups(["locationName", "locationOptions"])
   const [formOpen, setFormOpen] = useTransientState(false)
   const [editing, setEditing] = useTransientState<Employee | undefined>(undefined)
   const [viewing, setViewing] = useTransientState<Row | null>(null)
@@ -198,7 +199,7 @@ export default function EmployeesPage() {
             defaultSort={{ id: "name" }}
             exportOptions={{ filename: "employes", title: "Registre du personnel", subtitle: filters.describe(), summary: [{ label: "Effectif", value: formatNumber(k.headcount) }, { label: "Masse salariale", value: formatMoney(k.payroll) }] }}
             bulkActions={(sel, clear) => (
-              <Button variant="outline" size="sm" onClick={() => { sel.forEach((e) => update("employees", e.id, { status: "actif" })); toast.success("Statut mis à jour"); clear() }}>
+              <Button variant="outline" size="sm" onClick={async () => { if (!(await updateMany("employees", sel.map((e) => e.id), { status: "actif" }))) return; toast.success("Statut mis à jour"); clear() }}>
                 Marquer actifs
               </Button>
             )}
@@ -208,7 +209,7 @@ export default function EmployeesPage() {
                   { label: "Voir le dossier", icon: LuEye, onSelect: () => setViewing(e) },
                   { label: "Modifier", icon: LuPencil, onSelect: () => openEdit(e) },
                   { label: "Fiche de pointage", icon: LuCalendarDays, onSelect: () => router.push("/rh/pointage") },
-                  { label: "Déclarer une sortie", icon: LuUserX, onSelect: () => { update("employees", e.id, { status: "sorti" }); toast.success("Sortie enregistrée", { description: e.fullName }) }, hidden: e.status === "sorti" },
+                  { label: "Déclarer une sortie", icon: LuUserX, onSelect: () => { void update("employees", e.id, { status: "sorti" }).then((ok) => ok && toast.success("Sortie enregistrée", { description: e.fullName })) }, hidden: e.status === "sorti" },
                   { label: "Supprimer", icon: LuTrash2, destructive: true, separatorBefore: true, onSelect: () => setToDelete(e) },
                 ]}
               />
@@ -300,7 +301,7 @@ export default function EmployeesPage() {
                         <div className="truncate text-xs text-muted-foreground">{f ? `${f.name} · ${formatFileSize(f.size)}` : "Manquant"}</div>
                       </div>
                       {f ? (
-                        <Button variant="outline" size="xs" onClick={() => void openFile(f).then((ok) => !ok && toast.error("Fichier introuvable sur cet appareil"))}>
+                        <Button variant="outline" size="xs" onClick={() => void openFile(f).then((ok) => !ok && toast.error("Fichier introuvable ou inaccessible"))}>
                           <LuEye /> Ouvrir
                         </Button>
                       ) : (
@@ -321,8 +322,10 @@ export default function EmployeesPage() {
         description="Préférez « Déclarer une sortie » pour conserver l'historique (pointages, paie, congés)."
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("employees", [toDelete.id])
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("employees", [toDelete.id]))) return
+          }
           toast.success("Dossier supprimé")
           setToDelete(null)
           setViewing(null)

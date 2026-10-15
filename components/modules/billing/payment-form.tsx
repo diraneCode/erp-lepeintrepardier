@@ -14,8 +14,9 @@ import { formatMoney } from "@/lib/format"
 import { paymentMethod, toOptions } from "@/lib/labels"
 import { uid, useStore } from "@/lib/store"
 import type { Invoice } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
-export function PaymentFormDialog({ open, onOpenChange, invoice }: { open: boolean; onOpenChange: (o: boolean) => void; invoice?: Invoice | null }) {
+function PaymentFormDialogContent({ open, onOpenChange, invoice }: { open: boolean; onOpenChange: (o: boolean) => void; invoice?: Invoice | null }) {
   const recordPayment = useStore((s) => s.recordPayment)
   const balance = invoice ? invoiceBalance(invoice) : 0
 
@@ -36,9 +37,9 @@ export function PaymentFormDialog({ open, onOpenChange, invoice }: { open: boole
     if (open) form.reset({ date: format(new Date(), "yyyy-MM-dd"), amount: balance, method: "virement", reference: "" })
   }, [open, balance, form])
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     if (!invoice) return
-    recordPayment({ id: uid("pay"), invoiceId: invoice.id, ...v })
+    if (!(await recordPayment({ id: uid("pay"), invoiceId: invoice.id, ...v }))) return
     toast.success("Encaissement enregistré", { description: `${formatMoney(v.amount)} sur ${invoice.number}` })
     onOpenChange(false)
   })
@@ -61,3 +62,5 @@ export function PaymentFormDialog({ open, onOpenChange, invoice }: { open: boole
     </FormDialog>
   )
 }
+
+export const PaymentFormDialog = lazyDialog(PaymentFormDialogContent)

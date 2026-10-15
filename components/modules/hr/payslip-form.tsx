@@ -12,6 +12,7 @@ import { computePayslip } from "@/lib/calc"
 import { formatMoney, formatMonth } from "@/lib/format"
 import { useStore } from "@/lib/store"
 import type { Payslip } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const amount = z.number({ error: "Montant requis" }).min(0, "Doit être positif")
 const schema = z.object({
@@ -24,7 +25,7 @@ const schema = z.object({
 })
 type FormValues = z.infer<typeof schema>
 
-export function PayslipFormDialog({ open, onOpenChange, payslip, employeeName }: { open: boolean; onOpenChange: (o: boolean) => void; payslip?: Payslip | null; employeeName?: string }) {
+function PayslipFormDialogContent({ open, onOpenChange, payslip, employeeName }: { open: boolean; onOpenChange: (o: boolean) => void; payslip?: Payslip | null; employeeName?: string }) {
   const update = useStore((s) => s.update)
   const form = useForm<FormValues>({ resolver: zodResolver(schema) })
   React.useEffect(() => {
@@ -49,9 +50,9 @@ export function PayslipFormDialog({ open, onOpenChange, payslip, employeeName }:
     otherDeductions: safe(values.otherDeductions),
   })
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     if (!payslip) return
-    update("payslips", payslip.id, v)
+    if (!(await update("payslips", payslip.id, v))) return
     toast.success("Bulletin mis à jour", { description: `Net à payer : ${formatMoney(computePayslip(v).net)}` })
     onOpenChange(false)
   })
@@ -87,3 +88,5 @@ export function PayslipFormDialog({ open, onOpenChange, payslip, employeeName }:
     </FormDialog>
   )
 }
+
+export const PayslipFormDialog = lazyDialog(PayslipFormDialogContent)

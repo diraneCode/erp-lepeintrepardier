@@ -14,6 +14,7 @@ import { LuArrowLeft, LuArrowRight, LuBriefcase, LuCheck, LuCopy, LuFileText, Lu
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { DateField, NumberField, SelectField, TextField } from "@/components/forms/fields"
+import { Spinner } from "@/components/ui/spinner"
 import { DOC_ACCEPT, FileDropzone, IMAGE_ACCEPT } from "@/components/forms/file-dropzone"
 import { FormGrid } from "@/components/shared/form-dialog"
 import { useLookups } from "@/hooks/use-lookups"
@@ -23,6 +24,7 @@ import { toDate } from "@/lib/format"
 import { nextCode, uid, useStore } from "@/lib/store"
 import type { Employee } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const SMIG = 41_875
 const phone = z.string().trim().regex(/^\+?[0-9\s]{8,}$/, "Numéro de téléphone invalide")
@@ -107,14 +109,17 @@ const defaults = (e?: Employee): FormValues => ({
   emergencyPhone: e?.emergencyContact?.phone ?? "+237 ",
 })
 
-export function EmployeeFormDialog({ open, onOpenChange, employee }: { open: boolean; onOpenChange: (o: boolean) => void; employee?: Employee }) {
+function EmployeeFormDialogContent({ open, onOpenChange, employee }: { open: boolean; onOpenChange: (o: boolean) => void; employee?: Employee }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
-  const { locationOptions } = useLookups()
+  const { locationOptions } = useLookups(["locationOptions"])
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: defaults(employee), mode: "onTouched" })
   const [step, setStep] = React.useState(0)
   const [direction, setDirection] = React.useState(1)
   const isAdminAccount = employee?.role === "super_admin"
+  // Identifiant attribué dès l'ouverture : les pièces sont déposées dans son dossier
+  const draftId = React.useMemo(() => (open ? uid("e") : ""), [open])
+  const employeeId = employee?.id ?? draftId
 
   React.useEffect(() => {
     if (!open) return
@@ -151,7 +156,7 @@ export function EmployeeFormDialog({ open, onOpenChange, employee }: { open: boo
     setStep(target)
   }
 
-  const onValid = (v: FormValues) => {
+  const onValid = async (v: FormValues) => {
     if (useStore.getState().employees.some((e) => e.email.toLowerCase() === v.email.toLowerCase() && e.id !== employee?.id)) {
       form.setError("email", { message: "Cette adresse est déjà utilisée" })
       setStep(0)
@@ -183,15 +188,13 @@ export function EmployeeFormDialog({ open, onOpenChange, employee }: { open: boo
       emergencyContact: { name: v.emergencyName, relation: v.emergencyRelation, phone: v.emergencyPhone },
     }
     if (employee) {
-      update("employees", employee.id, payload)
+      if (!(await update("employees", employee.id, payload))) return
       toast.success("Dossier mis à jour", { description: `${v.firstName} ${v.lastName}` })
     } else {
-      const id = uid("e")
       const matricule = nextCode("LPP", useStore.getState().employees.map((e) => e.matricule))
-      add("employees", { ...payload, id, matricule })
-      // Compte de connexion créé avec le mot de passe initial
-      useStore.setState((s) => ({ passwords: { ...s.passwords, [id]: DEFAULT_PASSWORD } }))
-      toast.success("Employé ajouté", { description: `${v.firstName} ${v.lastName} · ${matricule} — mot de passe initial : ${DEFAULT_PASSWORD}`, duration: 10_000 })
+      // Le serveur crée le compte de connexion avec le mot de passe initial
+      if (!(await add("employees", { ...payload, id: draftId, matricule }))) return
+      toast.success("Employé ajouté", { description: `${v.firstName} ${v.lastName} — mot de passe initial : ${DEFAULT_PASSWORD}`, duration: 10_000 })
     }
     close(false)
   }
@@ -219,6 +222,8 @@ export function EmployeeFormDialog({ open, onOpenChange, employee }: { open: boo
           description={description}
           accept={image ? IMAGE_ACCEPT : DOC_ACCEPT}
           image={image}
+          folder={`employees/${employeeId}`}
+          kind={name}
           value={field.value}
           onChange={(f) => {
             field.onChange(f)
@@ -278,7 +283,7 @@ export function EmployeeFormDialog({ open, onOpenChange, employee }: { open: boo
                 {step === 0 && (
                   <>
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-[220px_1fr]">
-                      {fileField("photo", "Photo d'identité", "JPG, PNG ou WebP · 5 Mo max.", true)}
+                      {fileField("photo", "Photo d'identité", "JPG, PNG ou WebP · compressée automatiquement", true)}
                       <FormGrid>
                         <TextField control={form.control} name="firstName" label="Prénom" required />
                         <TextField control={form.control} name="lastName" label="Nom" required />
@@ -314,10 +319,10 @@ export function EmployeeFormDialog({ open, onOpenChange, employee }: { open: boo
                 )}
                 {step === 2 && (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {fileField("cni", "Carte nationale d'identité", "PDF ou image · recto/verso dans un seul fichier")}
-                    {fileField("cv", "Curriculum vitae", "PDF ou image")}
-                    {fileField("plan", "Plan de localisation", "Plan du domicile (PDF ou image)")}
-                    {fileField("diplome", "Dernier diplôme", "PDF ou image")}
+                    {fileField("cni", "Carte nationale d'identité", "PDF (5 Mo max.) ou image · recto/verso dans un seul fichier")}
+                    {fileField("cv", "Curriculum vitae", "PDF (5 Mo max.) ou image")}
+                    {fileField("plan", "Plan de localisation", "Plan du domicile · PDF (5 Mo max.) ou image")}
+                    {fileField("diplome", "Dernier diplôme", "PDF (5 Mo max.) ou image")}
                   </div>
                 )}
                 {step === 3 && (
@@ -364,8 +369,8 @@ export function EmployeeFormDialog({ open, onOpenChange, employee }: { open: boo
                   Suivant <LuArrowRight />
                 </Button>
               ) : (
-                <Button type="submit">
-                  <LuCheck /> {employee ? "Enregistrer" : "Créer l'employé"}
+                <Button type="submit" disabled={form.formState.isSubmitting}>
+                  {form.formState.isSubmitting ? <Spinner /> : <LuCheck />} {employee ? "Enregistrer" : "Créer l'employé"}
                 </Button>
               )}
             </div>
@@ -375,3 +380,5 @@ export function EmployeeFormDialog({ open, onOpenChange, employee }: { open: boo
     </Dialog>
   )
 }
+
+export const EmployeeFormDialog = lazyDialog(EmployeeFormDialogContent)

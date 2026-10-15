@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 
+import { QueryProvider } from "@/components/providers/query-provider"
 import { ThemeProvider, themeScript } from "@/components/providers/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -52,10 +53,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-full">
         <ThemeProvider>
-          <TooltipProvider delayDuration={200}>
-            {children}
-            <Toaster position="top-right" richColors={false} closeButton />
-          </TooltipProvider>
+          <QueryProvider>
+            <TooltipProvider delayDuration={200}>
+              {children}
+              <Toaster position="top-right" richColors={false} closeButton />
+            </TooltipProvider>
+          </QueryProvider>
         </ThemeProvider>
       </body>
     </html>

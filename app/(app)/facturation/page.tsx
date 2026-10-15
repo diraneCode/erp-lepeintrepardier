@@ -66,11 +66,11 @@ export default function BillingPage() {
 }
 
 function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
-  const { invoices, payments } = useScopedData()
+  const { invoices, payments } = useScopedData(["invoices", "payments"])
   const acc = useModuleAccess("facturation")
   const update = useStore((s) => s.update)
   const remove = useStore((s) => s.remove)
-  const { clientName, clientById, clientOptions, shopOptions, shopName } = useLookups()
+  const { clientName, clientById, clientOptions, shopOptions, shopName } = useLookups(["clientName", "clientById", "clientOptions", "shopOptions", "shopName"])
 
   const [formOpen, setFormOpen] = useTransientState(false)
   const [editing, setEditing] = useTransientState<Invoice | undefined>(undefined)
@@ -414,8 +414,10 @@ function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
         description="La facture sera conservée avec le statut « Annulée » et exclue des indicateurs."
         confirmLabel="Annuler la facture"
         destructive
-        onConfirm={() => {
-          if (toCancel) update("invoices", toCancel.id, { status: "annulee" })
+        onConfirm={async () => {
+          if (toCancel) {
+            if (!(await update("invoices", toCancel.id, { status: "annulee" }))) return
+          }
           toast.success("Facture annulée")
           setToCancel(null)
         }}
@@ -427,8 +429,10 @@ function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
         description="Action irréversible. Pour conserver une trace comptable, préférez l'annulation."
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("invoices", toDelete)
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("invoices", toDelete))) return
+          }
           toast.success("Facture(s) supprimée(s)")
           setToDelete(null)
         }}
@@ -438,8 +442,8 @@ function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
 }
 
 function PaymentsTab() {
-  const { payments, invoices } = useScopedData()
-  const { clientName } = useLookups()
+  const { payments, invoices } = useScopedData(["payments", "invoices"])
+  const { clientName } = useLookups(["clientName"])
   const invoiceById = React.useMemo(() => new Map(invoices.map((i) => [i.id, i])), [invoices])
 
   const config = React.useMemo<FilterConfig<Payment>>(

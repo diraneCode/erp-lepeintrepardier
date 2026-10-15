@@ -45,7 +45,7 @@ const achievementTone = (pct: number) => (pct >= 100 ? "text-success" : pct >= 8
 
 export default function ShopsPage() {
   const acc = useModuleAccess("boutiques")
-  const { shops } = useScopedData()
+  const { shops } = useScopedData(["shops"])
   const [tab, setTab] = React.useState("performance")
   const [formOpen, setFormOpen] = useTransientState(false)
   const [editing, setEditing] = useTransientState<Shop | undefined>(undefined)
@@ -104,14 +104,14 @@ export default function ShopsPage() {
 /* ---------- Performance sur une période ---------- */
 
 function PerformanceTab({ onEdit, onTargets, canDelete }: { onEdit?: (s: Shop) => void; onTargets?: (shopId: string) => void; canDelete: boolean }) {
-  const { shops } = useScopedData()
+  const { shops } = useScopedData(["shops"])
   const sales = useStore((s) => s.sales)
   const employees = useStore((s) => s.employees)
   const levels = useStore((s) => s.stockLevels)
   const targets = useStore((s) => s.shopTargets)
   const remove = useStore((s) => s.remove)
   const acc = useModuleAccess("boutiques")
-  const { employeeName, employeeOptions, productById, locationName } = useLookups()
+  const { employeeName, employeeOptions, productById, locationName } = useLookups(["employeeName", "employeeOptions", "productById", "locationName"])
   const [toDelete, setToDelete] = useTransientState<Shop | null>(null)
 
   const config = React.useMemo<FilterConfig<Shop>>(
@@ -283,10 +283,9 @@ function PerformanceTab({ onEdit, onTargets, canDelete }: { onEdit?: (s: Shop) =
         description="L'historique des ventes est conservé, mais la boutique n'apparaîtra plus dans les sélections."
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!toDelete) return
-          remove("shops", [toDelete.id])
-          remove("stockLevels", useStore.getState().stockLevels.filter((l) => l.locationId === toDelete.id).map((l) => l.id))
+          if (!(await remove("shops", [toDelete.id]))) return
           toast.success("Boutique supprimée")
           setToDelete(null)
         }}
@@ -298,7 +297,7 @@ function PerformanceTab({ onEdit, onTargets, canDelete }: { onEdit?: (s: Shop) =
 /* ---------- Objectifs mensuels ---------- */
 
 function TargetsTab({ year, onYearChange, onEdit }: { year: number; onYearChange: (y: number) => void; onEdit?: (shopId?: string) => void }) {
-  const { shops } = useScopedData()
+  const { shops } = useScopedData(["shops"])
   const sales = useStore((s) => s.sales)
   const targets = useStore((s) => s.shopTargets)
   const [focus, setFocus] = React.useState<string>("all")

@@ -86,8 +86,8 @@ export default function StockPage() {
 }
 
 function LevelsTab({ onMovement, global }: { onMovement?: (p: MovementPreset) => void; global: boolean }) {
-  const { stockLevels: levels } = useScopedData()
-  const { productById, locationById, categoryOptions, locationOptions, locationName } = useLookups()
+  const { stockLevels: levels } = useScopedData(["stockLevels"])
+  const { productById, locationById, categoryOptions, locationOptions, locationName } = useLookups(["productById", "locationById", "categoryOptions", "locationOptions", "locationName"])
 
   const rows = React.useMemo<LevelRow[]>(
     () =>
@@ -224,8 +224,8 @@ function LevelsTab({ onMovement, global }: { onMovement?: (p: MovementPreset) =>
 }
 
 function MovementsTab({ global }: { global: boolean }) {
-  const { stockMovements: movements } = useScopedData()
-  const { productName, locationName, employeeName, productOptions, locationOptions, employeeOptions, productById } = useLookups()
+  const { stockMovements: movements } = useScopedData(["stockMovements"])
+  const { productName, locationName, employeeName, productOptions, locationOptions, employeeOptions, productById } = useLookups(["productName", "locationName", "employeeName", "productOptions", "locationOptions", "employeeOptions", "productById"])
 
   const config = React.useMemo<FilterConfig<StockMovement>>(
     () => ({

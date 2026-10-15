@@ -14,6 +14,7 @@ import { opportunitySource, opportunityStage, toOptions } from "@/lib/labels"
 import { toISODate } from "@/lib/format"
 import { uid, useStore } from "@/lib/store"
 import type { Opportunity, OpportunityStage } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 export const STAGE_PROBABILITY: Record<OpportunityStage, number> = {
   prospection: 10,
@@ -49,10 +50,10 @@ const defaults = (o?: Opportunity): FormValues => ({
   notes: o?.notes ?? "",
 })
 
-export function OpportunityFormDialog({ open, onOpenChange, opportunity }: { open: boolean; onOpenChange: (o: boolean) => void; opportunity?: Opportunity }) {
+function OpportunityFormDialogContent({ open, onOpenChange, opportunity }: { open: boolean; onOpenChange: (o: boolean) => void; opportunity?: Opportunity }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
-  const { employeeOptions } = useLookups()
+  const { employeeOptions } = useLookups(["employeeOptions"])
   const clientOptions = useScopedClientOptions()
   const acc = useModuleAccess("opportunites")
   const me = useCurrentUser()
@@ -67,12 +68,12 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity }: { ope
     if (form.formState.dirtyFields.stage) form.setValue("probability", STAGE_PROBABILITY[stage])
   }, [stage, form])
 
-  const onSubmit = form.handleSubmit((values) => {
+  const onSubmit = form.handleSubmit(async (values) => {
     if (opportunity) {
-      update("opportunities", opportunity.id, values)
+      if (!(await update("opportunities", opportunity.id, values))) return
       toast.success("Opportunité mise à jour")
     } else {
-      add("opportunities", { ...values, id: uid("o"), createdAt: toISODate(new Date()) })
+      if (!(await add("opportunities", { ...values, id: uid("o"), createdAt: toISODate(new Date()) }))) return
       toast.success("Opportunité créée", { description: values.title })
     }
     onOpenChange(false)
@@ -101,3 +102,5 @@ export function OpportunityFormDialog({ open, onOpenChange, opportunity }: { ope
     </FormDialog>
   )
 }
+
+export const OpportunityFormDialog = lazyDialog(OpportunityFormDialogContent)

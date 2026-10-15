@@ -82,7 +82,7 @@ export default function AttendancePage() {
 
 function useAttendanceRows() {
   const attendance = useStore((s) => s.attendance)
-  const { employeeById } = useLookups()
+  const { employeeById } = useLookups(["employeeById"])
   return React.useMemo<Row[]>(
     () =>
       attendance.flatMap((a) => {
@@ -96,7 +96,7 @@ function useAttendanceRows() {
 
 function RegisterTab({ onEdit }: { onEdit: (r?: Partial<Attendance>) => void }) {
   const rows = useAttendanceRows()
-  const { employeeOptions, locationOptions, locationName } = useLookups()
+  const { employeeOptions, locationOptions, locationName } = useLookups(["employeeOptions", "locationOptions", "locationName"])
 
   const config = React.useMemo<FilterConfig<Row>>(
     () => ({
@@ -216,7 +216,7 @@ function RegisterTab({ onEdit }: { onEdit: (r?: Partial<Attendance>) => void }) 
 function MonthlySheet({ onEdit }: { onEdit: (r?: Partial<Attendance>) => void }) {
   const rows = useAttendanceRows()
   const employees = useStore((s) => s.employees)
-  const { locationOptions } = useLookups()
+  const { locationOptions } = useLookups(["locationOptions"])
   const months = React.useMemo(() => Array.from({ length: 6 }, (_, i) => format(subMonths(new Date(), i), "yyyy-MM")), [])
   const [month, setMonth] = React.useState(months[0])
   const [dept, setDept] = React.useState("all")

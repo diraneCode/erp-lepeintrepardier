@@ -49,7 +49,7 @@ export default function EventsPage() {
   const update = useStore((s) => s.update)
   const remove = useStore((s) => s.remove)
   const acc = useModuleAccess("evenements")
-  const { employeeName } = useLookups()
+  const { employeeName } = useLookups(["employeeName"])
 
   const [formOpen, setFormOpen] = useTransientState(false)
   const [editing, setEditing] = useTransientState<MarketingEvent | undefined>(undefined)
@@ -211,7 +211,7 @@ export default function EventsPage() {
                 actions={[
                   { label: "Voir / participants", icon: LuEye, onSelect: () => setViewingId(e.id) },
                   { label: "Modifier", icon: LuPencil, onSelect: () => { setEditing(e); setFormOpen(true) }, hidden: !acc.write },
-                  { label: "Clôturer l'événement", icon: LuCheckCheck, onSelect: () => { update("events", e.id, { status: "termine" }); toast.success("Événement clôturé") }, hidden: !acc.write || e.status === "termine" || e.status === "annule" || e.startDate > today },
+                  { label: "Clôturer l'événement", icon: LuCheckCheck, onSelect: () => { void update("events", e.id, { status: "termine" }).then((ok) => ok && toast.success("Événement clôturé")) }, hidden: !acc.write || e.status === "termine" || e.status === "annule" || e.startDate > today },
                   { label: "Supprimer", icon: LuTrash2, destructive: true, separatorBefore: true, onSelect: () => setToDelete(e.id), hidden: !acc.write || !acc.global },
                 ]}
               />
@@ -267,8 +267,8 @@ export default function EventsPage() {
                   <Button
                     variant="outline"
                     size="xs"
-                    onClick={() => {
-                      update("events", viewing.id, { participants: viewing.participants.map((p) => (p.status === "inscrit" || p.status === "confirme" ? { ...p, status: "present" } : p)) })
+                    onClick={async () => {
+                      if (!(await update("events", viewing.id, { participants: viewing.participants.map((p) => (p.status === "inscrit" || p.status === "confirme" ? { ...p, status: "present" } : p)) }))) return
                       toast.success("Tous les inscrits marqués présents")
                     }}
                   >
@@ -318,8 +318,10 @@ export default function EventsPage() {
         description="Les inscriptions associées seront perdues. Préférez le statut « Annulé » pour garder l'historique."
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("events", [toDelete])
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("events", [toDelete]))) return
+          }
           toast.success("Événement supprimé")
           setToDelete(null)
           setViewingId(null)

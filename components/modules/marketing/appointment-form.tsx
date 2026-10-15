@@ -14,6 +14,7 @@ import { useLookups } from "@/hooks/use-lookups"
 import { appointmentStatus, appointmentType, toOptions } from "@/lib/labels"
 import { uid, useStore } from "@/lib/store"
 import type { Appointment } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const toMin = (t: string) => {
   const [h, m] = t.split(":").map(Number)
@@ -45,15 +46,15 @@ export interface AppointmentPreset {
   prospectId?: string
 }
 
-export function AppointmentFormDialog({ open, onOpenChange, appointment, preset }: { open: boolean; onOpenChange: (o: boolean) => void; appointment?: Appointment; preset?: AppointmentPreset }) {
+function AppointmentFormDialogContent({ open, onOpenChange, appointment, preset }: { open: boolean; onOpenChange: (o: boolean) => void; appointment?: Appointment; preset?: AppointmentPreset }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
   const all = useStore((s) => s.appointments)
   const employees = useStore((s) => s.employees)
   const acc = useModuleAccess("rendez_vous")
   const me = useCurrentUser()
-  const { clients, prospects } = useScopedData()
-  const { employeeOptions, shopById } = useLookups()
+  const { clients, prospects } = useScopedData(["clients", "prospects"])
+  const { employeeOptions, shopById } = useLookups(["employeeOptions", "shopById"])
   const form = useForm<FormValues>({ resolver: zodResolver(schema) })
 
   // Collaborateurs sélectionnables selon la portée
@@ -99,7 +100,7 @@ export function AppointmentFormDialog({ open, onOpenChange, appointment, preset 
     if (type && form.formState.dirtyFields.type && !form.getValues("title")) form.setValue("title", appointmentType[type])
   }, [type, form])
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     const start = toMin(v.startTime)
     const conflict = all.find(
       (a) =>
@@ -117,10 +118,10 @@ export function AppointmentFormDialog({ open, onOpenChange, appointment, preset 
     const { linkType: lt, targetId: tid, ...rest } = v
     const payload = { ...rest, clientId: lt === "client" ? tid : undefined, prospectId: lt === "prospect" ? tid : undefined }
     if (appointment) {
-      update("appointments", appointment.id, payload)
+      if (!(await update("appointments", appointment.id, payload))) return
       toast.success("Rendez-vous mis à jour")
     } else {
-      add("appointments", { ...payload, id: uid("rdv"), createdAt: format(new Date(), "yyyy-MM-dd") })
+      if (!(await add("appointments", { ...payload, id: uid("rdv"), createdAt: format(new Date(), "yyyy-MM-dd") }))) return
       toast.success("Rendez-vous planifié", { description: `${format(new Date(`${v.date}T00:00:00`), "dd/MM/yyyy")} à ${v.startTime}` })
     }
     onOpenChange(false)
@@ -174,3 +175,5 @@ export function AppointmentFormDialog({ open, onOpenChange, appointment, preset 
     </FormDialog>
   )
 }
+
+export const AppointmentFormDialog = lazyDialog(AppointmentFormDialogContent)

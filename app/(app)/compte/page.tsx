@@ -5,13 +5,13 @@ import { useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
-import { LuDatabase, LuHistory, LuInfo, LuKeyRound, LuLock, LuRotateCcw, LuUserCog } from "react-icons/lu"
+import { LuHistory, LuInfo, LuKeyRound, LuLock, LuRotateCcw, LuUserCog } from "react-icons/lu"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { TextField } from "@/components/forms/fields"
+import { Combobox, TextField } from "@/components/forms/fields"
 import { FormGrid } from "@/components/shared/form-dialog"
 import { ConfirmDialog } from "@/components/shared/confirm-dialog"
 import { DataTable, type Column } from "@/components/shared/data-table"
@@ -24,7 +24,7 @@ import { useAccess } from "@/hooks/use-access"
 import { useFilters, type FilterConfig } from "@/hooks/use-filters"
 import { useLookups } from "@/hooks/use-lookups"
 import { useTransientState } from "@/hooks/use-transient-state"
-import { ACCESS, SCOPE_LABEL } from "@/lib/access"
+import { ACCESS, DEFAULT_PASSWORD, SCOPE_LABEL } from "@/lib/access"
 import { formatDate, formatDateTime } from "@/lib/format"
 import { contractType, department, employeeStatus, maritalStatus } from "@/lib/labels"
 import { NAV_ITEMS } from "@/lib/nav"
@@ -93,7 +93,7 @@ export default function AccountPage() {
 
 function InfoTab() {
   const { user, role } = useAccess()
-  const { locationName } = useLookups()
+  const { locationName } = useLookups(["locationName"])
   if (!user || !role) return null
   const modules = NAV_ITEMS.filter((i) => i.module && ACCESS[role][i.module])
   return (
@@ -181,8 +181,8 @@ function PasswordTab() {
   ] as const
   const score = checks.filter(([re]) => re.test(next)).length
 
-  const onSubmit = form.handleSubmit((v) => {
-    const error = changePassword(v.current, v.next)
+  const onSubmit = form.handleSubmit(async (v) => {
+    const error = await changePassword(v.current, v.next)
     if (error) {
       form.setError("current", { message: error })
       return
@@ -223,7 +223,7 @@ function PasswordTab() {
           <Button type="button" variant="outline" onClick={() => form.reset()}>
             Annuler
           </Button>
-          <Button type="submit">Mettre à jour</Button>
+          <Button type="submit" disabled={form.formState.isSubmitting}>Mettre à jour</Button>
         </CardFooter>
       </form>
     </Card>
@@ -269,31 +269,50 @@ function ActivityTab() {
 }
 
 function AdminTab() {
-  const resetData = useStore((s) => s.resetData)
+  const { employeeOptions } = useLookups(["employeeOptions"])
+  const [employeeId, setEmployeeId] = React.useState("")
   const [confirmReset, setConfirmReset] = useTransientState(false)
+  const [pending, setPending] = React.useState(false)
+  const label = employeeOptions.find((o) => o.value === employeeId)?.label ?? ""
+
+  const reset = async () => {
+    setPending(true)
+    const res = await fetch("/api/admin/employees", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: employeeId, resetPassword: true }),
+    }).catch(() => null)
+    setPending(false)
+    setConfirmReset(false)
+    if (!res?.ok) {
+      const payload = (await res?.json().catch(() => null)) as { error?: string } | null
+      toast.error(payload?.error ?? "Réinitialisation impossible")
+      return
+    }
+    toast.success("Mot de passe réinitialisé", { description: `${label} : ${DEFAULT_PASSWORD}` })
+    setEmployeeId("")
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><LuDatabase className="size-4" /> Données de démonstration</CardTitle>
-        <CardDescription>Les données sont stockées localement dans ce navigateur. Réservé au super administrateur.</CardDescription>
+        <CardTitle className="flex items-center gap-2"><LuRotateCcw className="size-4" /> Réinitialiser un mot de passe</CardTitle>
+        <CardDescription>Attribue le mot de passe initial à un employé qui a perdu le sien. Il devra le changer depuis « Mon compte ».</CardDescription>
       </CardHeader>
-      <CardContent>
-        <Button variant="destructive" onClick={() => setConfirmReset(true)}>
-          <LuRotateCcw /> Réinitialiser les données
+      <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <Combobox value={employeeId} onChange={setEmployeeId} options={employeeOptions} placeholder="Choisir un employé…" className="sm:max-w-sm" />
+        <Button variant="destructive" disabled={!employeeId || pending} onClick={() => setConfirmReset(true)}>
+          <LuRotateCcw /> Réinitialiser
         </Button>
       </CardContent>
       <ConfirmDialog
         open={confirmReset}
         onOpenChange={setConfirmReset}
-        title="Réinitialiser toutes les données ?"
-        description="Toutes les saisies (y compris les mots de passe modifiés) seront remplacées par le jeu de démonstration initial."
+        title="Réinitialiser le mot de passe ?"
+        description={`Le mot de passe de ${label} sera remplacé par le mot de passe initial (${DEFAULT_PASSWORD}).`}
         confirmLabel="Réinitialiser"
         destructive
-        onConfirm={() => {
-          resetData()
-          toast.success("Données réinitialisées")
-          setConfirmReset(false)
-        }}
+        onConfirm={() => void reset()}
       />
     </Card>
   )

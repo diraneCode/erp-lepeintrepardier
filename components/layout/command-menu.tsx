@@ -18,7 +18,7 @@ import { useTheme } from "@/components/providers/theme-provider"
 import { useTransientState } from "@/hooks/use-transient-state"
 import { visibleNav } from "@/lib/nav"
 import { useAccess, useScopedData } from "@/hooks/use-access"
-import { useStore } from "@/lib/store"
+import { useCollection } from "@/lib/store"
 
 export function useCommandMenu() {
   const [open, setOpen] = useTransientState(false)
@@ -39,8 +39,9 @@ export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChang
   const router = useRouter()
   const { setTheme } = useTheme()
   const { can, access } = useAccess()
-  const scoped = useScopedData()
-  const products = useStore((s) => s.products)
+  // Les données de recherche ne sont chargées qu'à l'ouverture de la palette
+  const scoped = useScopedData(open ? ["clients", "invoices"] : [])
+  const products = useCollection("products", open)
   const clients = can("clients") ? scoped.clients : []
   const invoices = can("facturation") ? scoped.invoices : []
   const nav = visibleNav(can)

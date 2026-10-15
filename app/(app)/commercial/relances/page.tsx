@@ -32,15 +32,16 @@ type Row = Followup & { targetLabel: string; targetSub: string; amount: number; 
 type View = "ouvertes" | "retard" | "aujourdhui" | "toutes"
 
 export default function FollowupsPage() {
-  const { followups } = useScopedData()
+  const { followups } = useScopedData(["followups"])
   const prospects = useStore((s) => s.prospects)
   const quotes = useStore((s) => s.quotes)
   const invoices = useStore((s) => s.invoices)
   const update = useStore((s) => s.update)
+  const updateMany = useStore((s) => s.updateMany)
   const remove = useStore((s) => s.remove)
   const generate = useStore((s) => s.generateFollowups)
   const acc = useModuleAccess("relances")
-  const { clientName, clientById, employeeName, employeeOptions } = useLookups()
+  const { clientName, clientById, employeeName, employeeOptions } = useLookups(["clientName", "clientById", "employeeName", "employeeOptions"])
 
   const [view, setView] = React.useState<View>("ouvertes")
   const [formOpen, setFormOpen] = useTransientState(false)
@@ -120,8 +121,8 @@ export default function FollowupsPage() {
     }
   }, [rows, today])
 
-  const postpone = (ids: string[], days: number) => {
-    ids.forEach((id) => update("followups", id, { status: "reporte", dueDate: format(addDays(new Date(), days), "yyyy-MM-dd") }))
+  const postpone = async (ids: string[], days: number) => {
+    if (!(await updateMany("followups", ids, { status: "reporte", dueDate: format(addDays(new Date(), days), "yyyy-MM-dd") }))) return
     toast.success(`${ids.length} relance(s) reportée(s) de ${days} jour(s)`)
   }
 
@@ -161,8 +162,9 @@ export default function FollowupsPage() {
             <>
               <Button
                 variant="outline"
-                onClick={() => {
-                  const n = generate()
+                onClick={async () => {
+                  const n = await generate()
+                  if (n < 0) return
                   toast[n ? "success" : "info"](n ? `${n} relance(s) créée(s)` : "Aucune nouvelle relance à créer", { description: "Factures échues et devis envoyés depuis plus de 7 jours" })
                 }}
               >
@@ -218,7 +220,7 @@ export default function FollowupsPage() {
                   <Button variant="outline" size="sm" onClick={() => { postpone(open, 3); clear() }}>
                     Reporter de 3 j
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => { open.forEach((id) => update("followups", id, { status: "annule" })); toast.success("Relances annulées"); clear() }}>
+                  <Button variant="outline" size="sm" onClick={async () => { if (!(await updateMany("followups", open, { status: "annule" }))) return; toast.success("Relances annulées"); clear() }}>
                     <LuX /> Annuler
                   </Button>
                 </>
@@ -250,8 +252,10 @@ export default function FollowupsPage() {
         title="Supprimer cette relance ?"
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("followups", toDelete)
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("followups", toDelete))) return
+          }
           toast.success("Relance supprimée")
           setToDelete(null)
         }}

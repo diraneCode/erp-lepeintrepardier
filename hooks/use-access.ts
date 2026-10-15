@@ -3,14 +3,12 @@
 import { useCallback, useMemo } from "react"
 
 import { ROLE_LABEL, permissionFor, type ModuleKey, type Permission } from "@/lib/access"
-import { useStore } from "@/lib/store"
+import { useCollection, useMe } from "@/lib/store"
 import type { Employee } from "@/lib/types"
 
 /** Employé connecté (null si aucune session). */
 export function useCurrentUser(): Employee | null {
-  const id = useStore((s) => s.currentUserId)
-  const employees = useStore((s) => s.employees)
-  return useMemo(() => employees.find((e) => e.id === id) ?? null, [employees, id])
+  return useMe().data ?? null
 }
 
 export interface ModuleAccess extends Permission {
@@ -48,8 +46,33 @@ export function useModuleAccess(module: ModuleKey): ModuleAccess {
 
 /** Options de clients limitées au périmètre de l'utilisateur (formulaires). */
 export function useScopedClientOptions() {
-  const { clients } = useScopedData()
+  const { clients } = useScopedData(["clients"])
   return useMemo(() => clients.map((c) => ({ value: c.id, label: c.name, hint: c.code })), [clients])
+}
+
+export type ScopedKey =
+  | "prospects" | "followups" | "appointments" | "clients" | "clientIds" | "opportunities" | "quotes" | "sales"
+  | "invoices" | "payments" | "expenses" | "stockLevels" | "stockMovements" | "shops" | "warehouses"
+
+type Table = Parameters<typeof useCollection>[0]
+
+/** Tables nécessaires pour calculer chaque collection filtrée. */
+const NEEDS: Record<ScopedKey, Table[]> = {
+  prospects: ["prospects"],
+  followups: ["followups"],
+  appointments: ["appointments", "employees"],
+  clients: ["clients", "sales"],
+  clientIds: ["clients", "sales"],
+  opportunities: ["opportunities"],
+  quotes: ["quotes"],
+  sales: ["sales"],
+  invoices: ["invoices", "sales", "clients"],
+  payments: ["payments", "invoices", "sales", "clients"],
+  expenses: ["expenses"],
+  stockLevels: ["stockLevels"],
+  stockMovements: ["stockMovements"],
+  shops: ["shops"],
+  warehouses: ["warehouses"],
 }
 
 /**
@@ -57,24 +80,28 @@ export function useScopedClientOptions() {
  * - all  : toutes les données
  * - shop : données de son site d'affectation (boutique, entrepôt)
  * - own  : ses propres enregistrements (clients suivis, ventes réalisées…)
+ *
+ * `keys` liste les collections utilisées : seules les tables correspondantes
+ * sont chargées (les autres restent vides).
  */
-export function useScopedData() {
+export function useScopedData(keys: readonly ScopedKey[]) {
   const { user, access } = useAccess()
-  const clients = useStore((s) => s.clients)
-  const opportunities = useStore((s) => s.opportunities)
-  const quotes = useStore((s) => s.quotes)
-  const sales = useStore((s) => s.sales)
-  const invoices = useStore((s) => s.invoices)
-  const payments = useStore((s) => s.payments)
-  const expenses = useStore((s) => s.expenses)
-  const stockLevels = useStore((s) => s.stockLevels)
-  const stockMovements = useStore((s) => s.stockMovements)
-  const shops = useStore((s) => s.shops)
-  const warehouses = useStore((s) => s.warehouses)
-  const prospects = useStore((s) => s.prospects)
-  const followups = useStore((s) => s.followups)
-  const appointments = useStore((s) => s.appointments)
-  const employees = useStore((s) => s.employees)
+  const need = new Set(keys.flatMap((k) => NEEDS[k]))
+  const clients = useCollection("clients", need.has("clients"))
+  const opportunities = useCollection("opportunities", need.has("opportunities"))
+  const quotes = useCollection("quotes", need.has("quotes"))
+  const sales = useCollection("sales", need.has("sales"))
+  const invoices = useCollection("invoices", need.has("invoices"))
+  const payments = useCollection("payments", need.has("payments"))
+  const expenses = useCollection("expenses", need.has("expenses"))
+  const stockLevels = useCollection("stockLevels", need.has("stockLevels"))
+  const stockMovements = useCollection("stockMovements", need.has("stockMovements"))
+  const shops = useCollection("shops", need.has("shops"))
+  const warehouses = useCollection("warehouses", need.has("warehouses"))
+  const prospects = useCollection("prospects", need.has("prospects"))
+  const followups = useCollection("followups", need.has("followups"))
+  const appointments = useCollection("appointments", need.has("appointments"))
+  const employees = useCollection("employees", need.has("employees"))
 
   return useMemo(() => {
     const me = user?.id ?? ""

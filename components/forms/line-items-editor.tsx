@@ -61,7 +61,7 @@ export function LineItemsEditor<T extends FieldValues>({
   const setValue = setFormValue as unknown as UseFormSetValue<ItemsForm>
   const { fields, append, remove } = useFieldArray({ control: ctrl, name: "items" })
   const items = (useWatch({ control: ctrl, name: "items" }) ?? []) as LineItem[]
-  const { productById, productOptions } = useLookups()
+  const { productById, productOptions } = useLookups(["productById", "productOptions"])
   const stockLevels = useStore((s) => s.stockLevels)
   const totals = documentTotals(items.filter((i) => Number.isFinite(i.quantity) && Number.isFinite(i.unitPrice)).map((i) => ({ ...i, discount: Number.isFinite(i.discount) ? i.discount : 0 })))
 

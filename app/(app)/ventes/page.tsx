@@ -45,13 +45,13 @@ import type { Sale } from "@/lib/types"
 type Row = Sale & { subtotal: number; total: number; margin: number; units: number }
 
 export default function SalesPage() {
-  const { sales } = useScopedData()
+  const { sales } = useScopedData(["sales"])
   const acc = useModuleAccess("ventes")
   const remove = useStore((s) => s.remove)
   const cancelSale = useStore((s) => s.cancelSale)
   const createInvoiceFromSale = useStore((s) => s.createInvoice)
   const updateSale = useStore((s) => s.update)
-  const { clientName, clientById, shopName, employeeName, employeeOptions, shopOptions, productById, clientOptions } = useLookups()
+  const { clientName, clientById, shopName, employeeName, employeeOptions, shopOptions, productById, clientOptions } = useLookups(["clientName", "clientById", "shopName", "employeeName", "employeeOptions", "shopOptions", "productById", "clientOptions"])
 
   const canInvoice = !!useAccess().access("facturation")?.write
   const [formOpen, setFormOpen] = useTransientState(false)
@@ -153,13 +153,14 @@ export default function SalesPage() {
       notes: `Paiement : ${paymentMethod[s.paymentMethod]}${s.notes ? ` — ${s.notes}` : ""}`,
     }).then(() => toast.success("Ticket PDF généré"))
 
-  const invoiceSale = (s: Row) => {
+  const invoiceSale = async (s: Row) => {
     if (!s.clientId) return
     const id = uid("f")
     const number = nextNumber("FAC", useStore.getState().invoices)
-    createInvoiceFromSale({ id, number, clientId: s.clientId, boutiqueId: s.boutiqueId, date: s.date, dueDate: s.date, items: s.items, status: "emise", amountPaid: 0, saleId: s.id })
-    updateSale("sales", s.id, { invoiceId: id })
-    toast.success("Facture générée", { description: number })
+    const ok = await createInvoiceFromSale({ id, number, clientId: s.clientId, boutiqueId: s.boutiqueId, date: s.date, dueDate: s.date, items: s.items, status: "emise", amountPaid: 0, saleId: s.id })
+    if (!ok) return
+    await updateSale("sales", s.id, { invoiceId: id })
+    toast.success("Facture générée")
   }
 
   const columns: Column<Row>[] = [
@@ -314,8 +315,10 @@ export default function SalesPage() {
         description="Les articles seront réintégrés au stock de la boutique et la facture liée sera annulée."
         confirmLabel="Annuler la vente"
         destructive
-        onConfirm={() => {
-          if (toCancel) cancelSale(toCancel.id)
+        onConfirm={async () => {
+          if (toCancel) {
+            if (!(await cancelSale(toCancel.id))) return
+          }
           toast.success("Vente annulée", { description: "Stock réintégré" })
           setToCancel(null)
           setViewing(null)
@@ -328,8 +331,10 @@ export default function SalesPage() {
         description="La suppression n'impacte pas le stock. Préférez l'annulation pour réintégrer les articles."
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
-          if (toDelete) remove("sales", toDelete)
+        onConfirm={async () => {
+          if (toDelete) {
+            if (!(await remove("sales", toDelete))) return
+          }
           toast.success("Vente(s) supprimée(s)")
           setToDelete(null)
         }}

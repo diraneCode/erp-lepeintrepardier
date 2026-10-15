@@ -97,10 +97,11 @@ export default function ProductsPage() {
 
 function CatalogTab({ onEdit, onNew }: { onEdit?: (p: Product) => void; onNew: () => void }) {
   const products = useStore((s) => s.products)
-  const { stockLevels, sales } = useScopedData()
+  const { stockLevels, sales } = useScopedData(["stockLevels", "sales"])
   const update = useStore((s) => s.update)
+  const updateMany = useStore((s) => s.updateMany)
   const remove = useStore((s) => s.remove)
-  const { categoryName, categoryOptions, locationName, categoryById } = useLookups()
+  const { categoryName, categoryOptions, locationName, categoryById } = useLookups(["categoryName", "categoryOptions", "locationName", "categoryById"])
   const [viewing, setViewing] = useTransientState<Row | null>(null)
   const [toDelete, setToDelete] = useTransientState<string[] | null>(null)
 
@@ -255,7 +256,7 @@ function CatalogTab({ onEdit, onNew }: { onEdit?: (p: Product) => void; onNew: (
             exportOptions={{ filename: "catalogue-produits", title: "Catalogue produits", subtitle: filters.describe(), summary: [{ label: "Références", value: formatNumber(data.length) }, { label: "Valeur du stock", value: formatMoney(k.value) }, { label: "Marge moyenne", value: formatPercent(k.margin) }] }}
             bulkActions={(sel, clear) => (
               <>
-                <Button variant="outline" size="sm" onClick={() => { sel.forEach((p) => update("products", p.id, { status: "inactif" })); toast.success(`${sel.length} produit(s) désactivé(s)`); clear() }}>
+                <Button variant="outline" size="sm" onClick={async () => { if (!(await updateMany("products", sel.map((p) => p.id), { status: "inactif" }))) return; toast.success(`${sel.length} produit(s) désactivé(s)`); clear() }}>
                   Désactiver
                 </Button>
                 <Button variant="destructive" size="sm" onClick={() => setToDelete(sel.map((p) => p.id))}>
@@ -327,11 +328,9 @@ function CatalogTab({ onEdit, onNew }: { onEdit?: (p: Product) => void; onNew: (
         description="Les niveaux de stock associés seront également supprimés."
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!toDelete) return
-          remove("products", toDelete)
-          const ids = new Set(toDelete)
-          remove("stockLevels", useStore.getState().stockLevels.filter((l) => ids.has(l.productId)).map((l) => l.id))
+          if (!(await remove("products", toDelete))) return
           toast.success("Produit(s) supprimé(s)")
           setToDelete(null)
           setViewing(null)
@@ -344,7 +343,7 @@ function CatalogTab({ onEdit, onNew }: { onEdit?: (p: Product) => void; onNew: (
 function CategoriesTab({ onEdit }: { onEdit?: (c: Category) => void }) {
   const categories = useStore((s) => s.categories)
   const products = useStore((s) => s.products)
-  const { stockLevels } = useScopedData()
+  const { stockLevels } = useScopedData(["stockLevels"])
   const remove = useStore((s) => s.remove)
   const [toDelete, setToDelete] = useTransientState<Category | null>(null)
 
@@ -406,12 +405,12 @@ function CategoriesTab({ onEdit }: { onEdit?: (c: Category) => void }) {
         description={toDelete && (stats.get(toDelete.id)?.count ?? 0) > 0 ? "Cette catégorie contient encore des produits : réaffectez-les avant suppression." : "Cette action est irréversible."}
         confirmLabel="Supprimer"
         destructive
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!toDelete) return
           if ((stats.get(toDelete.id)?.count ?? 0) > 0) {
             toast.error("Suppression impossible", { description: "La catégorie contient des produits." })
           } else {
-            remove("categories", [toDelete.id])
+            if (!(await remove("categories", [toDelete.id]))) return
             toast.success("Catégorie supprimée")
           }
           setToDelete(null)

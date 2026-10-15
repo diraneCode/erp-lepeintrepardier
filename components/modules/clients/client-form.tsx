@@ -14,6 +14,7 @@ import { clientSegment, clientStatus, cityOptions, toOptions } from "@/lib/label
 import { toISODate } from "@/lib/format"
 import { nextCode, uid, useStore } from "@/lib/store"
 import type { Client } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const schema = z.object({
   name: z.string().trim().min(2, "Le nom doit contenir au moins 2 caractères"),
@@ -47,11 +48,11 @@ const defaults = (c?: Client): FormValues => ({
   notes: c?.notes ?? "",
 })
 
-export function ClientFormDialog({ open, onOpenChange, client }: { open: boolean; onOpenChange: (o: boolean) => void; client?: Client }) {
+function ClientFormDialogContent({ open, onOpenChange, client }: { open: boolean; onOpenChange: (o: boolean) => void; client?: Client }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
   const log = useStore((s) => s.log)
-  const { employeeOptions } = useLookups()
+  const { employeeOptions } = useLookups(["employeeOptions"])
   const acc = useModuleAccess("clients")
   const me = useCurrentUser()
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: defaults(client) })
@@ -61,14 +62,14 @@ export function ClientFormDialog({ open, onOpenChange, client }: { open: boolean
     if (open) form.reset({ ...defaults(client), ownerId: client?.ownerId ?? (acc.global ? "" : me?.id ?? "") })
   }, [open, client, form, acc.global, me])
 
-  const onSubmit = form.handleSubmit((values) => {
+  const onSubmit = form.handleSubmit(async (values) => {
     if (client) {
-      update("clients", client.id, values)
+      if (!(await update("clients", client.id, values))) return
       log("Modification", "Clients", values.name)
       toast.success("Client mis à jour", { description: values.name })
     } else {
       const code = nextCode("CLI", useStore.getState().clients.map((c) => c.code))
-      add("clients", { ...values, id: uid("cl"), code, createdAt: toISODate(new Date()) })
+      if (!(await add("clients", { ...values, id: uid("cl"), code, createdAt: toISODate(new Date()) }))) return
       log("Création", "Clients", values.name)
       toast.success("Client créé", { description: `${values.name} (${code})` })
     }
@@ -114,3 +115,5 @@ export function ClientFormDialog({ open, onOpenChange, client }: { open: boolean
     </FormDialog>
   )
 }
+
+export const ClientFormDialog = lazyDialog(ClientFormDialogContent)

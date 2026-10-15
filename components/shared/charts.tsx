@@ -128,6 +128,11 @@ const axisProps = {
   tick: { fill: "var(--muted-foreground)", fontSize: 11 },
 }
 
+/** Vrai si au moins une série a une valeur non nulle sur la période. */
+function hasValues(data: Record<string, number | string>[], series: Series[]) {
+  return data.some((d) => series.some((s) => Number(d[s.key]) !== 0 && Number.isFinite(Number(d[s.key]))))
+}
+
 /* ---------- Barres verticales (évolution) ---------- */
 
 export function TimeBarChart({
@@ -143,6 +148,7 @@ export function TimeBarChart({
   stacked?: boolean
   className?: string
 }) {
+  if (!hasValues(data, series)) return <EmptyChart />
   return (
     <div className="flex flex-col gap-3">
       {series.length > 1 && <ChartLegend items={series.map((s) => ({ label: s.label, color: s.color }))} />}
@@ -185,6 +191,7 @@ export function TimeLineChart({
   formatter?: Formatter
   className?: string
 }) {
+  if (!hasValues(data, series)) return <EmptyChart />
   return (
     <div className="flex flex-col gap-3">
       {series.length > 1 && <ChartLegend items={series.map((s) => ({ label: s.label, color: s.color }))} />}

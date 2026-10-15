@@ -17,6 +17,7 @@ import { formatMoney } from "@/lib/format"
 import { journalCode, toOptions } from "@/lib/labels"
 import { nextNumber, uid, useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const lineSchema = z
   .object({
@@ -44,7 +45,7 @@ type FormValues = z.infer<typeof schema>
 
 const accountOptions = ACCOUNTS.map((a) => ({ value: a.code, label: `${a.code} — ${a.name}`, hint: `Classe ${a.class}` }))
 
-export function JournalEntryFormDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+function JournalEntryFormDialogContent({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const add = useStore((s) => s.add)
   const form = useForm<FormValues>({ resolver: zodResolver(schema) })
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "lines" })
@@ -67,9 +68,9 @@ export function JournalEntryFormDialog({ open, onOpenChange }: { open: boolean; 
       })
   }, [open, form])
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     const number = nextNumber("EC", useStore.getState().journalEntries)
-    add("journalEntries", { ...v, id: uid("je"), number })
+    if (!(await add("journalEntries", { ...v, id: uid("je"), number }))) return
     toast.success("Écriture enregistrée", { description: number })
     onOpenChange(false)
   })
@@ -137,3 +138,5 @@ export function JournalEntryFormDialog({ open, onOpenChange }: { open: boolean; 
     </FormDialog>
   )
 }
+
+export const JournalEntryFormDialog = lazyDialog(JournalEntryFormDialogContent)

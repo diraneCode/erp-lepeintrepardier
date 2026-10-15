@@ -14,6 +14,7 @@ import { useCurrentUser, useModuleAccess } from "@/hooks/use-access"
 import { expenseCategory, paymentMethod, toOptions } from "@/lib/labels"
 import { nextNumber, uid, useStore } from "@/lib/store"
 import type { Expense } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const schema = z.object({
   date: z.string().min(1, "Date requise").refine((d) => d <= format(new Date(), "yyyy-MM-dd"), "La date ne peut être dans le futur"),
@@ -40,10 +41,10 @@ const defaults = (e?: Expense): FormValues => ({
   hasReceipt: e?.hasReceipt ?? true,
 })
 
-export function ExpenseFormDialog({ open, onOpenChange, expense }: { open: boolean; onOpenChange: (o: boolean) => void; expense?: Expense }) {
+function ExpenseFormDialogContent({ open, onOpenChange, expense }: { open: boolean; onOpenChange: (o: boolean) => void; expense?: Expense }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
-  const { locationOptions: allLocations, employeeOptions } = useLookups()
+  const { locationOptions: allLocations, employeeOptions } = useLookups(["locationOptions", "employeeOptions"])
   const acc = useModuleAccess("depenses")
   const me = useCurrentUser()
   const locationOptions = acc.global ? allLocations : allLocations.filter((l) => l.value === me?.locationId)
@@ -57,13 +58,13 @@ export function ExpenseFormDialog({ open, onOpenChange, expense }: { open: boole
       })
   }, [open, expense, form, acc.global, me])
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     if (expense) {
-      update("expenses", expense.id, v)
+      if (!(await update("expenses", expense.id, v))) return
       toast.success("Dépense mise à jour", { description: expense.number })
     } else {
       const number = nextNumber("DEP", useStore.getState().expenses, 4)
-      add("expenses", { ...v, id: uid("x"), number, status: "en_attente" })
+      if (!(await add("expenses", { ...v, id: uid("x"), number, status: "en_attente" }))) return
       toast.success("Dépense soumise pour approbation", { description: number })
     }
     onOpenChange(false)
@@ -85,3 +86,5 @@ export function ExpenseFormDialog({ open, onOpenChange, expense }: { open: boole
     </FormDialog>
   )
 }
+
+export const ExpenseFormDialog = lazyDialog(ExpenseFormDialogContent)

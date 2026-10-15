@@ -13,6 +13,7 @@ import { useLookups } from "@/hooks/use-lookups"
 import { campaignChannel, campaignStatus, clientSegment, toOptions } from "@/lib/labels"
 import { uid, useStore } from "@/lib/store"
 import type { Campaign, Promotion } from "@/lib/types"
+import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const d = (n = 0) => format(addDays(new Date(), n), "yyyy-MM-dd")
 
@@ -56,18 +57,19 @@ const campaignDefaults = (c?: Campaign): CampaignValues => ({
   description: c?.description ?? "",
 })
 
-export function CampaignFormDialog({ open, onOpenChange, campaign }: { open: boolean; onOpenChange: (o: boolean) => void; campaign?: Campaign }) {
+function CampaignFormDialogContent({ open, onOpenChange, campaign }: { open: boolean; onOpenChange: (o: boolean) => void; campaign?: Campaign }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
-  const { employeeOptions } = useLookups()
+  const { employeeOptions } = useLookups(["employeeOptions"])
   const form = useForm<CampaignValues>({ resolver: zodResolver(campaignSchema), defaultValues: campaignDefaults(campaign) })
   React.useEffect(() => {
     if (open) form.reset(campaignDefaults(campaign))
   }, [open, campaign, form])
 
-  const onSubmit = form.handleSubmit((v) => {
-    if (campaign) update("campaigns", campaign.id, v)
-    else add("campaigns", { ...v, id: uid("cp") })
+  const onSubmit = form.handleSubmit(async (v) => {
+    if (campaign) {
+      if (!(await update("campaigns", campaign.id, v))) return
+    } else if (!(await add("campaigns", { ...v, id: uid("cp") }))) return
     toast.success(campaign ? "Campagne mise à jour" : "Campagne créée", { description: v.name })
     onOpenChange(false)
   })
@@ -134,25 +136,26 @@ const promoDefaults = (p?: Promotion): PromoValues => ({
   active: p?.active ?? true,
 })
 
-export function PromotionFormDialog({ open, onOpenChange, promotion }: { open: boolean; onOpenChange: (o: boolean) => void; promotion?: Promotion }) {
+function PromotionFormDialogContent({ open, onOpenChange, promotion }: { open: boolean; onOpenChange: (o: boolean) => void; promotion?: Promotion }) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
-  const { categoryOptions } = useLookups()
+  const { categoryOptions } = useLookups(["categoryOptions"])
   const form = useForm<PromoValues>({ resolver: zodResolver(promoSchema), defaultValues: promoDefaults(promotion) })
   React.useEffect(() => {
     if (open) form.reset(promoDefaults(promotion))
   }, [open, promotion, form])
   const type = form.watch("type")
 
-  const onSubmit = form.handleSubmit((v) => {
+  const onSubmit = form.handleSubmit(async (v) => {
     const exists = useStore.getState().promotions.some((p) => p.code === v.code && p.id !== promotion?.id)
     if (exists) {
       form.setError("code", { message: "Ce code existe déjà" })
       return
     }
     const payload = { ...v, categoryId: v.categoryId === "all" ? null : v.categoryId }
-    if (promotion) update("promotions", promotion.id, payload)
-    else add("promotions", { ...payload, id: uid("pr"), usageCount: 0 })
+    if (promotion) {
+      if (!(await update("promotions", promotion.id, payload))) return
+    } else if (!(await add("promotions", { ...payload, id: uid("pr"), usageCount: 0 }))) return
     toast.success(promotion ? "Promotion mise à jour" : "Promotion créée", { description: v.code })
     onOpenChange(false)
   })
@@ -174,3 +177,7 @@ export function PromotionFormDialog({ open, onOpenChange, promotion }: { open: b
     </FormDialog>
   )
 }
+
+export const CampaignFormDialog = lazyDialog(CampaignFormDialogContent)
+
+export const PromotionFormDialog = lazyDialog(PromotionFormDialogContent)
