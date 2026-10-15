@@ -17,12 +17,31 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 })
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://erp.pardier.com"
+const DESCRIPTION = "L'ERP du Peintre Pardier : ventes, facturation, stock, RH, paie et comptabilité réunis dans un seul outil."
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Le Peintre Pardier ERP",
     template: "%s · Le Peintre Pardier ERP",
   },
-  description: "ERP Le Peintre Pardier — ventes, facturation, stock, RH, comptabilité.",
+  description: DESCRIPTION,
+  openGraph: {
+    type: "website",
+    locale: "fr_FR",
+    url: "/",
+    siteName: "Le Peintre Pardier ERP",
+    title: "Le Peintre Pardier ERP",
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Le Peintre Pardier ERP",
+    description: DESCRIPTION,
+  },
+  // Outil interne : pas d'indexation par les moteurs de recherche
+  robots: { index: false, follow: false },
   applicationName: "Le Peintre Pardier ERP",
   icons: {
     icon: [
