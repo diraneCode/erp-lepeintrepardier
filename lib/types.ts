@@ -480,6 +480,8 @@ export interface Attendance {
   checkIn: string | null
   checkOut: string | null
   breakMinutes: number
+  /** Heures supplémentaires retenues (minutes) : calculées au départ, ajustables par les RH */
+  overtimeMinutes?: number
   status: AttendanceStatus
   note?: string
 }
@@ -548,6 +550,40 @@ export interface Expense {
   submittedBy: ID
   approvedBy?: ID
   hasReceipt: boolean
+}
+
+/* ---------- Caisse ---------- */
+
+export type CashKind = "vente" | "encaissement" | "apport" | "autre_entree" | "depense" | "versement_banque" | "annulation" | "autre_sortie"
+export type DepositMode = "especes" | "cheque" | "mobile_money"
+
+/** Ligne du brouillard de caisse (entrée ou sortie d'espèces d'un site). */
+export interface CashMovement {
+  id: ID
+  number: string
+  date: string
+  /** Horodatage de saisie (ordre des opérations d'une même journée) */
+  createdAt?: string
+  locationId: ID
+  direction: "entree" | "sortie"
+  kind: CashKind
+  amount: number
+  label: string
+  /** N° de facture, de vente ou de dépense */
+  reference?: string
+  /** Client (encaissement) ou bénéficiaire (dépense) */
+  clientName?: string
+  /* Versement en banque */
+  bankName?: string
+  bankAccount?: string
+  depositMode?: DepositMode
+  slipNumber?: string
+  depositor?: string
+  saleId?: ID
+  paymentId?: ID
+  expenseId?: ID
+  userId?: ID
+  note?: string
 }
 
 export type JournalCode = "VE" | "AC" | "BQ" | "CA" | "OD" | "PA"

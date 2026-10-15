@@ -42,7 +42,7 @@ export function DocumentLines({ items, paid }: { items: LineItem[]; paid?: numbe
             <dd className="text-right tabular">− {formatMoney(t.discount)}</dd>
           </>
         )}
-        <dt className="text-muted-foreground">TVA 19,25 %</dt>
+        <dt className="text-muted-foreground">TVA</dt>
         <dd className="text-right tabular">{formatMoney(t.tax)}</dd>
         <dt className="border-t pt-1.5 font-semibold">Total TTC</dt>
         <dd className="border-t pt-1.5 text-right font-semibold tabular">{formatMoney(t.total)}</dd>

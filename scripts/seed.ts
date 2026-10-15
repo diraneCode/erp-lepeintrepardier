@@ -54,6 +54,7 @@ const ORDER = [
   ["payslips", "payslips"],
   ["expenses", "expenses"],
   ["journalEntries", "journal_entries"],
+  ["cashMovements", "cash_movements"],
   ["notifications", "notifications"],
   ["activity", "activity_logs"],
 ] as const

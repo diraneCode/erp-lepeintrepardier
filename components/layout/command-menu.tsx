@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { LuMoon, LuPlus, LuSun } from "react-icons/lu"
 
 import {
+  Command,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
@@ -64,6 +65,8 @@ export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChang
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange} title="Recherche globale" description="Rechercher un module, un client, un produit ou une facture">
+      {/* Le contexte de recherche (cmdk) est fourni par Command, pas par la fenêtre */}
+      <Command>
       <CommandInput placeholder="Rechercher un module, un client, un produit, une facture…" />
       <CommandList>
         <CommandEmpty>Aucun résultat.</CommandEmpty>
@@ -120,6 +123,7 @@ export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChang
           </CommandItem>
         </CommandGroup>
       </CommandList>
+      </Command>
     </CommandDialog>
   )
 }

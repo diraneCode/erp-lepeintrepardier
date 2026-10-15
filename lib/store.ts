@@ -48,10 +48,24 @@ interface Actions {
   recordPayment: (payment: Payment) => Promise<boolean>
   convertQuoteToInvoice: (quoteId: string) => Promise<Invoice | null>
   createStockMovement: (movement: StockMovement) => Promise<boolean>
+  /** Plusieurs produits en une seule opération : tout est enregistré, ou rien */
+  createStockMovements: (movements: StockMovement[]) => Promise<boolean>
   setLeaveStatus: (id: string, status: Leave["status"], comment?: string) => Promise<boolean>
   setExpenseStatus: (ids: string[], status: Expense["status"]) => Promise<boolean>
   /** Renvoie le nombre de bulletins créés (-1 si échec) */
   generatePayslips: (period: string) => Promise<number>
+  /** Dépense payée en espèces depuis la caisse d'un site ; renvoie son numéro (null si échec) */
+  recordCashExpense: (input: CashExpenseInput) => Promise<string | null>
+}
+
+export interface CashExpenseInput {
+  locationId: string
+  date: string
+  amount: number
+  category: Expense["category"]
+  description: string
+  supplier: string
+  hasReceipt: boolean
 }
 
 export type AppState = Data & Actions & { hydrated: boolean; currentUserId: string | null }
@@ -114,6 +128,7 @@ const TABLES: Record<CollectionKey, string> = {
   events: "events",
   notifications: "notifications",
   activity: "activity_logs",
+  cashMovements: "cash_movements",
 }
 
 /** Tri par défaut (les plus récents d'abord) pour un affichage cohérent. */
@@ -129,6 +144,7 @@ const ORDER: Partial<Record<CollectionKey, string>> = {
   leaves: "requested_at",
   notifications: "date",
   activity: "date",
+  cashMovements: "date",
   clients: "created_at",
   prospects: "created_at",
   followups: "due_date",
@@ -140,9 +156,11 @@ const ORDER: Partial<Record<CollectionKey, string>> = {
 /** Tables modifiées en cascade par les déclencheurs SQL. */
 const DEPENDENTS: Partial<Record<CollectionKey, CollectionKey[]>> = {
   invoices: ["journalEntries"],
-  payments: ["invoices", "journalEntries"],
+  payments: ["invoices", "journalEntries", "cashMovements"],
   stockMovements: ["stockLevels"],
-  expenses: ["journalEntries"],
+  expenses: ["journalEntries", "cashMovements"],
+  cashMovements: ["journalEntries"],
+  sales: ["journalEntries", "cashMovements"],
   products: ["stockLevels"],
   warehouses: ["stockLevels"],
   shops: ["stockLevels", "shopTargets"],
@@ -502,6 +520,21 @@ const rawActions: Actions = {
     return ok
   },
 
+  createStockMovements: async (movements) => {
+    if (!movements.length) return true
+    const userId = me()?.id
+    setCached("stockMovements", (rows) => [...movements, ...rows])
+    // Une seule requête : si une ligne est refusée (stock insuffisant…), aucune n'est enregistrée
+    const { error } = await getSupabase()
+      .from("stock_movements")
+      .insert(movements.map((m) => row({ ...m, userId: userId ?? m.userId })))
+    refresh("stockMovements")
+    if (error) return fail(error)
+    const first = movements[0]
+    rawActions.log("Mouvement", "Stock", `${first.reference} (${first.type}, ${movements.length} produit(s))`)
+    return true
+  },
+
   setLeaveStatus: async (id, status, comment) => {
     const ok = await rawActions.update("leaves", id, { status, comment, approverId: me()?.id })
     if (ok) rawActions.log("Décision", "Congés", `Demande ${status}`)
@@ -516,6 +549,16 @@ const rawActions: Actions = {
     if (error) return fail(error)
     rawActions.log("Statut", "Dépenses", `${ids.length} dépense(s) → ${status}`)
     return true
+  },
+
+  recordCashExpense: async (input) => {
+    const { data, error } = await getSupabase().rpc("cash_expense", { p: input })
+    refresh("expenses", "cashMovements")
+    if (error) {
+      fail(error)
+      return null
+    }
+    return (data as string | null) ?? null
   },
 
   generatePayslips: async (period) => {
@@ -534,6 +577,7 @@ const FALLBACK: Partial<Record<keyof Actions, unknown>> = {
   login: "Connexion impossible pour le moment. Réessayez.",
   changePassword: "Modification impossible pour le moment. Réessayez.",
   convertProspect: null,
+  recordCashExpense: null,
   convertQuoteToInvoice: null,
   generateFollowups: -1,
   generatePayslips: -1,

@@ -59,7 +59,7 @@ const productDefaults = (p?: Product): ProductValues => ({
   unit: p?.unit ?? "pot_4l",
   purchasePrice: p?.purchasePrice ?? Number.NaN,
   salePrice: p?.salePrice ?? Number.NaN,
-  taxRate: p?.taxRate ?? 19.25,
+  taxRate: p?.taxRate ?? 0,
   minStock: p?.minStock ?? 20,
   status: p?.status ?? "actif",
   barcode: p?.barcode ?? "",

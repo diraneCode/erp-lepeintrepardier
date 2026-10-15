@@ -63,7 +63,10 @@ export default function QuotesPage() {
   const [viewing, setViewing] = useTransientState<Row | null>(null)
   const [toDelete, setToDelete] = useTransientState<string[] | null>(null)
   const [followPreset, setFollowPreset] = useTransientState<FollowupPreset | null>(null)
-  const canFollowup = !!useAccess().access("relances")?.write
+  const { access } = useAccess()
+  const canFollowup = !!access("relances")?.write
+  // Transformer une proforma en facture : réservé à ceux qui ont accès à la facturation
+  const canInvoice = !!access("facturation")
 
   const today = toISODate(new Date())
   const rows = React.useMemo<Row[]>(
@@ -229,7 +232,7 @@ export default function QuotesPage() {
                   { label: "Modifier", icon: LuPencil, onSelect: () => openEdit(q), hidden: !!q.invoiceId || !acc.write },
                   { label: "Télécharger PDF", icon: LuFileDown, onSelect: () => downloadPdf(q) },
                   { label: "Marquer envoyé", icon: LuSend, onSelect: () => update("quotes", q.id, { status: "envoye" }), hidden: q.status !== "brouillon" || !acc.write },
-                  { label: "Transformer en facture", icon: LuReceipt, onSelect: () => toInvoice(q), hidden: !!q.invoiceId || q.status === "refuse" || !acc.write },
+                  { label: "Transformer en facture", icon: LuReceipt, onSelect: () => toInvoice(q), hidden: !!q.invoiceId || q.status === "refuse" || !acc.write || !canInvoice },
                   { label: "Programmer une relance", icon: LuSend, onSelect: () => setFollowPreset({ targetType: "devis", targetId: q.id, subject: `Relance devis ${q.number}` }), hidden: !canFollowup || (q.status !== "envoye" && q.status !== "brouillon") },
                   { label: "Dupliquer", icon: LuCopy, onSelect: () => duplicate(q), hidden: !acc.write },
                   { label: "Supprimer", icon: LuTrash2, destructive: true, separatorBefore: true, onSelect: () => setToDelete([q.id]), hidden: !acc.global || !acc.write },
@@ -256,7 +259,7 @@ export default function QuotesPage() {
               <Button variant="outline" onClick={() => downloadPdf(viewing)}>
                 <LuFileDown /> PDF
               </Button>
-              {!viewing.invoiceId && viewing.status !== "refuse" && acc.write && (
+              {!viewing.invoiceId && viewing.status !== "refuse" && acc.write && canInvoice && (
                 <Button onClick={() => toInvoice(viewing)}>
                   <LuReceipt /> Transformer en facture
                 </Button>

@@ -102,7 +102,7 @@ export default function ExpensesPage() {
   }
   const changeStatus = async (ids: string[], status: Expense["status"]) => {
     if (!(await setStatus(ids, status))) return
-    toast.success(`${ids.length} dépense(s) → ${expenseStatus[status].label}`, status === "payee" ? { description: "Écritures comptables générées" } : undefined)
+    toast.success(`${ids.length} dépense(s) → ${expenseStatus[status].label}`, status === "payee" ? { description: "Écritures comptables générées ; les dépenses en espèces sortent de la caisse du site." } : undefined)
   }
 
   const columns: Column<Expense>[] = [

@@ -61,7 +61,9 @@ Le super administrateur peut le réinitialiser (*Mon compte → Administration*)
 droit d'écriture. `hooks/use-access.ts` fournit l'utilisateur connecté et les données filtrées
 (`useScopedData`). Les filtres par personne (commercial, vendeur, responsable…) ne sont proposés
 qu'aux profils à portée globale. Postes (= rôles) : caissière, gestionnaire de stock, commercial(e),
-magasinier, plus le super administrateur. Tout employé peut créer prospects et clients.
+magasinier, plus le super administrateur. Tout employé peut créer prospects et clients ; ceux qui facturent
+(caissière, commercial·e, administration) voient et peuvent choisir tous les clients, mais seul le responsable
+d'un client (ou l'administration) modifie sa fiche.
 Le filtrage côté interface est doublé par la sécurité de la base : chaque table est protégée par des
 politiques RLS qui appliquent la même matrice (`supabase/sql/03_policies.sql`). Les pièces des employés
 (photo, CNI, CV, plan, diplôme) sont dans le bucket privé `employee-files`, servies par URL signée.

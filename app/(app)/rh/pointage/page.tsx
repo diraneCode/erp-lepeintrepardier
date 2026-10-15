@@ -3,7 +3,7 @@
 import * as React from "react"
 import { eachDayOfInterval, endOfMonth, format, isWeekend, startOfMonth, subMonths } from "date-fns"
 import { fr } from "date-fns/locale"
-import { LuAlarmClock, LuClock, LuLogIn, LuPencil, LuPlus, LuTimer, LuUserCheck, LuUserX } from "react-icons/lu"
+import { LuAlarmClock, LuClock, LuClockArrowUp, LuLogIn, LuPencil, LuPlus, LuTimer, LuUserCheck, LuUserX } from "react-icons/lu"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -24,7 +24,7 @@ import { AttendanceFormDialog } from "@/components/modules/hr/attendance-form"
 import { useFilters, type FilterConfig } from "@/hooks/use-filters"
 import { useLookups } from "@/hooks/use-lookups"
 import { useTransientState } from "@/hooks/use-transient-state"
-import { DAILY_MINUTES, lateMinutes, overtimeMinutes, workedMinutes } from "@/lib/calc"
+import { DAILY_MINUTES, lateMinutes, recordedOvertime, workedMinutes } from "@/lib/calc"
 import { capitalize, formatDate, formatDuration, formatNumber, formatPercent } from "@/lib/format"
 import { attendanceStatus, department, toOptions } from "@/lib/labels"
 import { useStore } from "@/lib/store"
@@ -88,7 +88,7 @@ function useAttendanceRows() {
       attendance.flatMap((a) => {
         const e = employeeById.get(a.employeeId)
         if (!e) return []
-        return [{ ...a, name: `${e.firstName} ${e.lastName}`, department: e.department, locationId: e.locationId, worked: workedMinutes(a), late: lateMinutes(a), overtime: overtimeMinutes(a) }]
+        return [{ ...a, name: `${e.firstName} ${e.lastName}`, department: e.department, locationId: e.locationId, worked: workedMinutes(a), late: lateMinutes(a), overtime: recordedOvertime(a) }]
       }),
     [attendance, employeeById]
   )
@@ -111,6 +111,7 @@ function RegisterTab({ onEdit }: { onEdit: (r?: Partial<Attendance>) => void }) 
       ranges: [
         { id: "late", label: "Retard", unit: "min", accessor: (r) => r.late },
         { id: "worked", label: "Temps travaillé", unit: "min", accessor: (r) => r.worked },
+        { id: "overtime", label: "Heures sup.", unit: "min", accessor: (r) => r.overtime },
       ],
     }),
     [employeeOptions, locationOptions]
@@ -128,6 +129,7 @@ function RegisterTab({ onEdit }: { onEdit: (r?: Partial<Attendance>) => void }) 
       absent: data.filter((r) => r.status === "absent").length,
       worked: data.reduce((s, r) => s + r.worked, 0),
       overtime: data.reduce((s, r) => s + r.overtime, 0),
+      overtimeStaff: new Set(data.filter((r) => r.overtime > 0).map((r) => r.employeeId)).size,
     }
   }, [data])
 
@@ -167,11 +169,12 @@ function RegisterTab({ onEdit }: { onEdit: (r?: Partial<Attendance>) => void }) 
           <FilterBar filters={filters} />
         </CardContent>
       </Card>
-      <StatGrid>
+      <StatGrid className="sm:grid-cols-3 xl:grid-cols-5">
         <StatCard index={0} label="Taux de présence" value={formatPercent(k.rate)} icon={LuUserCheck} tone="green" hint="hors congés" />
         <StatCard index={1} label="Retards" value={formatNumber(k.late)} icon={LuAlarmClock} tone="orange" hint={`${formatDuration(k.lateMin)} cumulés`} />
         <StatCard index={2} label="Absences" value={formatNumber(k.absent)} icon={LuUserX} tone="red" />
-        <StatCard index={3} label="Heures travaillées" value={formatDuration(k.worked).replace(" 00", "")} icon={LuTimer} tone="blue" hint={`dont ${formatDuration(k.overtime)} sup.`} />
+        <StatCard index={3} label="Heures travaillées" value={formatDuration(k.worked).replace(" 00", "")} icon={LuTimer} tone="blue" hint="sur la période" />
+        <StatCard index={4} label="Heures supplémentaires" value={formatDuration(k.overtime).replace(" 00", "")} icon={LuClockArrowUp} tone="violet" hint={`${formatNumber(k.overtimeStaff)} employé(s) concerné(s)`} />
       </StatGrid>
       <ChartCard title="Présences quotidiennes" description={`Nombre de pointages par ${trend.granularity}`}>
         <TimeBarChart

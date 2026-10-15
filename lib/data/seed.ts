@@ -3,7 +3,8 @@ import { addDays, addMonths, eachDayOfInterval, format, isWeekend, startOfMonth,
 import { DEFAULT_PASSWORD, type Role } from "@/lib/access"
 
 import { EXPENSE_ACCOUNT } from "@/lib/data/accounts"
-import { computePayslip, documentTotals, businessDaysBetween } from "@/lib/calc"
+import { BANKS } from "@/lib/labels"
+import { computePayslip, documentTotals, businessDaysBetween, overtimeMinutes } from "@/lib/calc"
 import type {
   ActivityLog,
   AppNotification,
@@ -12,6 +13,7 @@ import type {
   Category,
   Client,
   Employee,
+  CashMovement,
   Expense,
   Invoice,
   JournalEntry,
@@ -651,13 +653,17 @@ export function generateSeed(today = new Date()) {
       const checkInMin = status === "retard" ? int(8 * 60 + 10, 9 * 60 + 40) : int(7 * 60 + 30, 8 * 60 + 5)
       const checkOutMin = int(16 * 60 + 30, 18 * 60 + 45)
       const working = status === "present" || status === "retard" || status === "mission"
+      const breakMinutes = working ? pick([45, 60, 60, 60, 90]) : 0
+      const checkIn = working ? hm(checkInMin) : null
+      const checkOut = working && !isToday ? hm(checkOutMin) : null
       attendance.push({
         id: `pt_${e.id}_${iso(d)}`,
         employeeId: e.id,
         date: iso(d),
-        checkIn: working ? hm(checkInMin) : null,
-        checkOut: working && !isToday ? hm(checkOutMin) : null,
-        breakMinutes: working ? pick([45, 60, 60, 60, 90]) : 0,
+        checkIn,
+        checkOut,
+        breakMinutes,
+        overtimeMinutes: overtimeMinutes({ checkIn, checkOut, breakMinutes }),
         status,
         note: status === "absent" ? pick(["Absence non justifiée", "Justificatif en attente", "Maladie (certificat)"]) : status === "mission" ? pick(["Chantier client", "Formation fournisseur", "Livraison Kribi"]) : undefined,
       })
@@ -1018,6 +1024,68 @@ export function generateSeed(today = new Date()) {
   /* Comptes utilisateurs, notifications, activité */
   const passwords: Record<string, string> = Object.fromEntries(employees.map((e) => [e.id, DEFAULT_PASSWORD]))
   const now = format(today, "yyyy-MM-dd'T'HH:mm")
+  /* Caisse : brouillard de chaque boutique (ventes et règlements en espèces,
+     dépenses payées en espèces, versements hebdomadaires en banque) */
+  const cashMovements: CashMovement[] = []
+  {
+    const shopIds = new Set(shops.map((s) => s.id))
+    const invoiceById = new Map(invoices.map((i) => [i.id, i]))
+    const clientNameOf = (id?: string | null) => (id ? clients.find((c) => c.id === id)?.name : undefined)
+    type Draft = Omit<CashMovement, "id" | "number">
+    const drafts: Draft[] = []
+    for (const sale of sales) {
+      if (sale.paymentMethod !== "especes" || sale.invoiceId || sale.status === "brouillon" || sale.status === "annulee") continue
+      drafts.push({ date: sale.date, locationId: sale.boutiqueId, direction: "entree", kind: "vente", amount: documentTotals(sale.items).total, label: `Vente ${sale.number}`, reference: sale.number, clientName: clientNameOf(sale.clientId) ?? "Client comptoir", saleId: sale.id })
+    }
+    for (const pay of payments) {
+      const inv = invoiceById.get(pay.invoiceId)
+      if (pay.method !== "especes" || !inv) continue
+      drafts.push({ date: pay.date, locationId: inv.boutiqueId, direction: "entree", kind: "encaissement", amount: pay.amount, label: `Règlement facture ${inv.number}`, reference: inv.number, clientName: clientNameOf(inv.clientId), paymentId: pay.id })
+    }
+    for (const x of expenses) {
+      if (x.status !== "payee" || x.paymentMethod !== "especes" || !shopIds.has(x.locationId)) continue
+      drafts.push({ date: x.date, locationId: x.locationId, direction: "sortie", kind: "depense", amount: x.amount, label: x.description, reference: x.number, clientName: x.supplier, expenseId: x.id })
+    }
+    drafts.sort((a, b) => a.date.localeCompare(b.date) || (a.direction === "entree" ? -1 : 1))
+    const first = drafts[0]?.date ?? iso(today)
+    const counters = { n: 0 }
+    // Heures de saisie croissantes dans la journée : l'ordre du brouillard est conservé
+    const perDay = new Map<string, number>()
+    const push = (d: Draft) => {
+      counters.n += 1
+      const key = `${d.locationId}|${d.date}`
+      const k = perDay.get(key) ?? 0
+      perDay.set(key, k + 1)
+      const minutes = 8 * 60 + k * 9
+      cashMovements.push({ ...d, id: `cai${counters.n}`, number: `CAI-${d.date.slice(0, 4)}-${pad(counters.n, 5)}`, createdAt: `${d.date}T${pad(Math.floor(minutes / 60), 2)}:${pad(minutes % 60, 2)}` })
+    }
+    for (const shop of shops) {
+      const cashier = employees.find((e) => e.role === "caissiere" && e.locationId === shop.id)
+      const bank = pick(BANKS)
+      let balance = 0
+      const open = (amount: number, date: string, label: string) => {
+        push({ date, locationId: shop.id, direction: "entree", kind: "apport", amount, label, userId: "e1" })
+        balance += amount
+      }
+      open(200_000, first, "Fonds de caisse initial")
+      let lastDeposit = first
+      for (const d of drafts.filter((x) => x.locationId === shop.id)) {
+        // Versement hebdomadaire de la recette en banque (on garde un fond de caisse)
+        const days = (new Date(`${d.date}T00:00:00`).getTime() - new Date(`${lastDeposit}T00:00:00`).getTime()) / 86_400_000
+        if (days >= 7 && balance > 400_000) {
+          const amount = round(balance - 150_000, 5_000)
+          push({ date: d.date, locationId: shop.id, direction: "sortie", kind: "versement_banque", amount, label: `Versement recette — ${bank}`, bankName: bank, bankAccount: `10005-000${int(10, 99)}-${int(1000000, 9999999)}`, depositMode: "especes", slipNumber: `BV-${int(100000, 999999)}`, depositor: cashier ? `${cashier.firstName} ${cashier.lastName}` : "Caissière", userId: cashier?.id })
+          balance -= amount
+          lastDeposit = d.date
+        }
+        if (d.direction === "sortie" && balance < d.amount) open(round(d.amount - balance + 100_000, 5_000), d.date, "Approvisionnement de caisse")
+        push({ ...d, userId: cashier?.id })
+        balance += d.direction === "entree" ? d.amount : -d.amount
+      }
+    }
+    cashMovements.sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))
+  }
+
   const notifications: AppNotification[] = [
     { id: "n1", date: now, title: "Stock bas", description: "Plusieurs références sont sous le seuil minimum.", module: "Stock", href: "/stock", read: false, tone: "warning" },
     { id: "n2", date: format(subDays(today, 1), "yyyy-MM-dd'T'09:12"), title: "Factures en retard", description: "Des factures ont dépassé leur échéance.", module: "Facturation", href: "/facturation", read: false, tone: "danger" },
@@ -1051,6 +1119,7 @@ export function generateSeed(today = new Date()) {
     leaves,
     payslips,
     expenses,
+    cashMovements,
     journalEntries,
     shopTargets,
     prospects,

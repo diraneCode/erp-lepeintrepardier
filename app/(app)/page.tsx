@@ -53,8 +53,9 @@ export default function HomePage() {
 }
 
 function Dashboard() {
-  const scoped = useScopedData(["sales", "invoices", "payments", "clients", "stockLevels", "shops", "opportunities", "followups"])
-  const { sales, invoices, payments, clients, stockLevels: levels, shops } = scoped
+  const scoped = useScopedData(["sales", "invoices", "payments", "myClients", "stockLevels", "shops", "opportunities", "followups"])
+  // Indicateurs : ses propres clients (ou ceux de sa boutique), pas tout le fichier client
+  const { sales, invoices, payments, myClients: clients, stockLevels: levels, shops } = scoped
   const { user, can, access } = useAccess()
   const global = access("dashboard")?.global ?? false
   const allLeaves = useStore((s) => s.leaves)

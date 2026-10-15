@@ -321,7 +321,7 @@ export async function exportDocumentPDF(d: CommercialDocument) {
     ["Total brut HT", formatMoney(d.totals.gross)],
     ["Remises", d.totals.discount ? `− ${formatMoney(d.totals.discount)}` : formatMoney(0)],
     ["Total HT", formatMoney(d.totals.subtotal)],
-    ["TVA (19,25 %)", formatMoney(d.totals.tax)],
+    ["TVA", formatMoney(d.totals.tax)],
     ["Total TTC", formatMoney(d.totals.total), true],
   ]
   if (d.paid !== undefined) {

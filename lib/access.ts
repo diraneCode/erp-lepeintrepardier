@@ -26,6 +26,7 @@ export type ModuleKey =
   | "boutiques"
   | "comptabilite"
   | "depenses"
+  | "caisse"
   | "rh_employes"
   | "rh_pointage"
   | "rh_conges"
@@ -60,6 +61,7 @@ const ALL_MODULES: ModuleKey[] = [
   "boutiques",
   "comptabilite",
   "depenses",
+  "caisse",
   "rh_employes",
   "rh_pointage",
   "rh_conges",
@@ -99,11 +101,13 @@ export const ACCESS: Record<Role, Partial<Record<ModuleKey, Permission>>> = {
     facturation: rw("shop"),
     comptabilite: rw("all"),
     depenses: rw("shop"),
+    caisse: rw("shop"),
     produits: ro("all"),
     stock: ro("shop"),
   },
   gestionnaire_stock: {
     ...BASE,
+    devis: rw("own"),
     produits: rw("all"),
     stock: rw("all"),
     magasins: rw("all"),
@@ -133,6 +137,15 @@ export const SCOPE_LABEL: Record<Scope, string> = {
 export function permissionFor(role: Role | undefined, module: ModuleKey): Permission | null {
   if (!role) return null
   return ACCESS[role]?.[module] ?? null
+}
+
+/**
+ * Ceux qui facturent (facture, vente avec facture, proforma → facture) voient
+ * tous les clients pour pouvoir les choisir ; la modification d'une fiche reste
+ * réservée à son responsable et à l'administration (politiques RLS identiques).
+ */
+export function seesAllClients(role: Role | undefined) {
+  return (["facturation", "ventes", "devis"] as ModuleKey[]).some((m) => permissionFor(role, m)?.write)
 }
 
 export const DEFAULT_PASSWORD = "Pardier@2026"

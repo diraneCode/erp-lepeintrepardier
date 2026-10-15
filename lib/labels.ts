@@ -11,6 +11,8 @@ import type {
   ParticipantStatus,
   ProspectStatus,
   CampaignChannel,
+  CashKind,
+  DepositMode,
   CampaignStatus,
   ClientSegment,
   ClientStatus,
@@ -359,4 +361,39 @@ export const POSITIONS: { label: string; department: import("@/lib/types").Depar
   { label: "Gestionnaire de stock", department: "logistique", role: "gestionnaire_stock" },
   { label: "Commercial(e)", department: "commercial", role: "commercial" },
   { label: "Magasinier", department: "logistique", role: "magasinier" },
+]
+
+/* ---------- Caisse ---------- */
+
+export const cashKind: LabelMap<CashKind> = {
+  vente: { label: "Vente comptoir", tone: "success" },
+  encaissement: { label: "Règlement client", tone: "success" },
+  apport: { label: "Approvisionnement", tone: "info" },
+  autre_entree: { label: "Autre entrée", tone: "info" },
+  depense: { label: "Dépense", tone: "warning" },
+  versement_banque: { label: "Versement banque", tone: "violet" },
+  annulation: { label: "Remboursement", tone: "destructive" },
+  autre_sortie: { label: "Autre sortie", tone: "neutral" },
+}
+
+export const depositMode: Record<DepositMode, string> = {
+  especes: "Espèces",
+  cheque: "Chèque",
+  mobile_money: "Mobile Money",
+}
+
+/** Banques proposées à la saisie d'un versement (saisie libre possible) */
+export const BANKS = [
+  "Afriland First Bank",
+  "BICEC",
+  "Société Générale Cameroun",
+  "SCB Cameroun",
+  "UBA Cameroun",
+  "Ecobank Cameroun",
+  "Commercial Bank Cameroun (CBC)",
+  "Banque Atlantique",
+  "BGFIBank Cameroun",
+  "CCA Bank",
+  "Access Bank Cameroun",
+  "Citibank Cameroun",
 ]

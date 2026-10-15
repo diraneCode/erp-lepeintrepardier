@@ -10,7 +10,7 @@ import { format } from "date-fns"
 import { ComboboxField, DateField, NumberField, SelectField, TextField } from "@/components/forms/fields"
 import { FormDialog, FormGrid } from "@/components/shared/form-dialog"
 import { useLookups } from "@/hooks/use-lookups"
-import { workedMinutes } from "@/lib/calc"
+import { DAILY_MINUTES, MAX_DAILY_OVERTIME, overtimeMinutes, workedMinutes } from "@/lib/calc"
 import { formatDuration } from "@/lib/format"
 import { attendanceStatus, toOptions } from "@/lib/labels"
 import { useStore } from "@/lib/store"
@@ -27,6 +27,7 @@ const schema = z
     checkIn: z.union([time, z.literal("")]),
     checkOut: z.union([time, z.literal("")]),
     breakMinutes: z.number({ error: "Requis" }).int().min(0).max(240, "Maximum 4 h"),
+    overtimeMinutes: z.number({ error: "Requis" }).int("Nombre entier de minutes").min(0).max(MAX_DAILY_OVERTIME, "Maximum 12 h par jour"),
     note: z.string().optional(),
   })
   .superRefine((v, ctx) => {
@@ -52,16 +53,30 @@ function AttendanceFormDialogContent({ open, onOpenChange, record }: { open: boo
         checkIn: record?.checkIn ?? (record?.id ? "" : format(new Date(), "HH:mm")),
         checkOut: record?.checkOut ?? "",
         breakMinutes: record?.breakMinutes ?? 60,
+        overtimeMinutes: record?.overtimeMinutes ?? (record?.checkIn ? overtimeMinutes({ checkIn: record.checkIn, checkOut: record.checkOut ?? null, breakMinutes: record.breakMinutes ?? 0 }) : 0),
         note: record?.note ?? "",
       })
   }, [open, record, form])
 
-  const [status, checkIn, checkOut, breakMinutes] = useWatch({ control: form.control, name: ["status", "checkIn", "checkOut", "breakMinutes"] })
+  const [status, checkIn, checkOut, breakMinutes, overtimeValueRaw] = useWatch({ control: form.control, name: ["status", "checkIn", "checkOut", "breakMinutes", "overtimeMinutes"] })
+  const overtimeValue = Number.isFinite(overtimeValueRaw) ? overtimeValueRaw : 0
   const worked = workedMinutes({ checkIn: checkIn || null, checkOut: checkOut || null, breakMinutes: Number.isFinite(breakMinutes) ? breakMinutes : 0 })
   const working = status === "present" || status === "retard" || status === "mission"
+  const computedOvertime = Math.max(0, worked - DAILY_MINUTES)
+
+  // Tant que les RH ne l'ont pas modifié, le champ suit le dépassement calculé
+  React.useEffect(() => {
+    if (!form.formState.dirtyFields.overtimeMinutes) form.setValue("overtimeMinutes", working ? computedOvertime : 0)
+  }, [computedOvertime, working, form])
 
   const onSubmit = form.handleSubmit(async (v) => {
-    const payload = { ...v, checkIn: working ? v.checkIn || null : null, checkOut: working ? v.checkOut || null : null, breakMinutes: working ? v.breakMinutes : 0 }
+    const payload = {
+      ...v,
+      checkIn: working ? v.checkIn || null : null,
+      checkOut: working ? v.checkOut || null : null,
+      breakMinutes: working ? v.breakMinutes : 0,
+      overtimeMinutes: working ? v.overtimeMinutes : 0,
+    }
     const existing = useStore.getState().attendance.find((a) => a.employeeId === v.employeeId && a.date === v.date)
     const id = record?.id ?? existing?.id
     if (id) {
@@ -80,10 +95,25 @@ function AttendanceFormDialogContent({ open, onOpenChange, record }: { open: boo
         <NumberField control={form.control} name="breakMinutes" label="Pause" suffix="min" min={0} step={15} disabled={!working} />
         <TextField control={form.control} name="checkIn" label="Arrivée" type="time" disabled={!working} />
         <TextField control={form.control} name="checkOut" label="Départ" type="time" disabled={!working} />
+        <NumberField
+          control={form.control}
+          name="overtimeMinutes"
+          label="Heures supplémentaires"
+          suffix="min"
+          min={0}
+          step={15}
+          disabled={!working}
+          description={working ? `Dépassement de la journée de 8 h : ${computedOvertime ? formatDuration(computedOvertime) : "aucun"}` : undefined}
+        />
         <TextField control={form.control} name="note" label={status === "absent" ? "Motif d'absence" : "Observation"} required={status === "absent"} className="sm:col-span-2" />
         {working && (
           <div className="rounded-lg bg-muted/60 px-3 py-2 text-sm sm:col-span-2">
             Temps de travail effectif : <span className="font-semibold tabular">{formatDuration(worked)}</span>
+            {overtimeValue > 0 && (
+              <>
+                {" "}· heures sup. retenues : <span className="font-semibold tabular">{formatDuration(overtimeValue)}</span>
+              </>
+            )}
           </div>
         )}
       </FormGrid>

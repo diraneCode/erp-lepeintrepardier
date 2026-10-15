@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from "react"
 
-import { ROLE_LABEL, permissionFor, type ModuleKey, type Permission } from "@/lib/access"
+import { ROLE_LABEL, permissionFor, seesAllClients, type ModuleKey, type Permission } from "@/lib/access"
 import { useCollection, useMe } from "@/lib/store"
 import type { Employee } from "@/lib/types"
 
@@ -51,7 +51,7 @@ export function useScopedClientOptions() {
 }
 
 export type ScopedKey =
-  | "prospects" | "followups" | "appointments" | "clients" | "clientIds" | "opportunities" | "quotes" | "sales"
+  | "prospects" | "followups" | "appointments" | "clients" | "clientIds" | "myClients" | "opportunities" | "quotes" | "sales"
   | "invoices" | "payments" | "expenses" | "stockLevels" | "stockMovements" | "shops" | "warehouses"
 
 type Table = Parameters<typeof useCollection>[0]
@@ -63,11 +63,12 @@ const NEEDS: Record<ScopedKey, Table[]> = {
   appointments: ["appointments", "employees"],
   clients: ["clients", "sales"],
   clientIds: ["clients", "sales"],
+  myClients: ["clients", "sales"],
   opportunities: ["opportunities"],
   quotes: ["quotes"],
   sales: ["sales"],
-  invoices: ["invoices", "sales", "clients"],
-  payments: ["payments", "invoices", "sales", "clients"],
+  invoices: ["invoices", "sales", "clients", "quotes"],
+  payments: ["payments", "invoices", "sales", "clients", "quotes"],
   expenses: ["expenses"],
   stockLevels: ["stockLevels"],
   stockMovements: ["stockMovements"],
@@ -113,22 +114,27 @@ export function useScopedData(keys: readonly ScopedKey[]) {
       salesScope === "all" ? sales : salesScope === "shop" ? sales.filter((s) => s.boutiqueId === loc) : sales.filter((s) => s.sellerId === me)
 
     const clientScope = scope("clients") ?? scope("dashboard")
-    let scopedClients = clients
+    // Clients « à soi » : ceux qu'on suit ou à qui l'on a vendu (shop : ceux de sa boutique)
+    let myClients = clients
     if (clientScope === "own") {
       const soldTo = new Set(sales.filter((s) => s.sellerId === me && s.clientId).map((s) => s.clientId))
-      scopedClients = clients.filter((c) => c.ownerId === me || soldTo.has(c.id))
+      myClients = clients.filter((c) => c.ownerId === me || soldTo.has(c.id))
     } else if (clientScope === "shop") {
       const boughtHere = new Set(sales.filter((s) => s.boutiqueId === loc && s.clientId).map((s) => s.clientId))
-      scopedClients = clients.filter((c) => boughtHere.has(c.id) || c.ownerId === me)
+      myClients = clients.filter((c) => boughtHere.has(c.id) || c.ownerId === me)
     }
+    // Ceux qui facturent voient (et peuvent choisir) tous les clients
+    const scopedClients = seesAllClients(user?.role) ? clients : myClients
     const clientIds = new Set(scopedClients.map((c) => c.id))
 
     const invoiceScope = scope("facturation") ?? scope("dashboard")
     let scopedInvoices = invoices
     if (invoiceScope === "own") {
       const mySales = new Set(sales.filter((s) => s.sellerId === me).map((s) => s.id))
-      const myClients = new Set(clients.filter((c) => c.ownerId === me).map((c) => c.id))
-      scopedInvoices = invoices.filter((i) => (i.saleId && mySales.has(i.saleId)) || myClients.has(i.clientId))
+      const ownedClients = new Set(clients.filter((c) => c.ownerId === me).map((c) => c.id))
+      const myQuotes = new Set(quotes.filter((q) => q.ownerId === me).map((q) => q.id))
+      // Ses ventes, ses clients, et les factures issues de ses proformas
+      scopedInvoices = invoices.filter((i) => (i.saleId && mySales.has(i.saleId)) || ownedClients.has(i.clientId) || (i.quoteId && myQuotes.has(i.quoteId)))
     } else if (invoiceScope === "shop") {
       scopedInvoices = invoices.filter((i) => i.boutiqueId === loc)
     }
@@ -160,6 +166,7 @@ export function useScopedData(keys: readonly ScopedKey[]) {
             ? appointments.filter((a) => locOf.get(a.assignedTo) === loc)
             : appointments.filter((a) => a.assignedTo === me),
       clients: scopedClients,
+      myClients,
       clientIds,
       opportunities: ownOnly(opportunities, "opportunites", (o) => o.ownerId),
       quotes: ownOnly(quotes, "devis", (q) => q.ownerId),

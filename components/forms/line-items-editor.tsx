@@ -39,7 +39,7 @@ export const lineItemSchema = z
 
 export const lineItemsSchema = z.array(lineItemSchema).min(1, "Ajoutez au moins une ligne")
 
-export const emptyLine: LineItem = { productId: "", description: "", quantity: 1, unitPrice: 0, discount: 0, taxRate: 19.25 }
+export const emptyLine: LineItem = { productId: "", description: "", quantity: 1, unitPrice: 0, discount: 0, taxRate: 0 }
 /** Ligne sans article du catalogue (service, accessoire, prestation…) */
 export const emptyCustomLine: LineItem = { ...emptyLine, custom: true }
 
@@ -219,7 +219,7 @@ export function LineItemsEditor<T extends FieldValues>({
           <dd className="text-right tabular">{formatMoney(totals.gross)}</dd>
           <dt className="text-muted-foreground">Remises</dt>
           <dd className="text-right tabular">− {formatMoney(totals.discount)}</dd>
-          <dt className="text-muted-foreground">TVA 19,25 %</dt>
+          <dt className="text-muted-foreground">TVA</dt>
           <dd className="text-right tabular">{formatMoney(totals.tax)}</dd>
           <dt className="border-t pt-1.5 font-semibold">Total TTC</dt>
           <dd className="border-t pt-1.5 text-right font-semibold tabular">{formatMoney(totals.total)}</dd>

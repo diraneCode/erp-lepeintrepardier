@@ -22,7 +22,7 @@ begin
     'warehouses', 'shops', 'shop_targets', 'employees', 'categories', 'products', 'clients', 'prospects',
     'opportunities', 'quotes', 'sales', 'invoices', 'payments', 'followups', 'stock_levels', 'stock_movements',
     'campaigns', 'promotions', 'appointments', 'events', 'attendance', 'leaves', 'payslips', 'expenses',
-    'journal_entries', 'notifications', 'activity_logs'
+    'journal_entries', 'notifications', 'activity_logs', 'cash_movements'
   ] loop
     execute format('alter table public.%I enable row level security', t);
   end loop;
@@ -86,11 +86,13 @@ create policy employees_write on public.employees for all to authenticated
   using ((select app.is_admin())) with check ((select app.is_admin()));
 
 -- -----------------------------------------------------------------------------
--- Clients : ses clients, ceux à qui l'on a vendu, ou (caissière) ceux de sa boutique
+-- Clients : tous les clients pour ceux qui facturent ou établissent des proformas
+-- (administration, caissière, commercial, gestionnaire de stock) ; pour les autres, leurs clients et ceux à qui ils ont vendu.
+-- La modification reste réservée au responsable du client et à l'administration.
 -- -----------------------------------------------------------------------------
 create policy clients_select on public.clients for select to authenticated
   using (
-    (select app.is_admin())
+    (select app.my_role()) in ('super_admin', 'caissiere', 'commercial', 'gestionnaire_stock')
     or owner_id = (select app.my_employee_id())
     or exists (
       select 1 from public.sales s
@@ -102,11 +104,7 @@ create policy clients_select on public.clients for select to authenticated
 create policy clients_insert on public.clients for insert to authenticated
   with check ((select app.my_employee_id()) is not null and ((select app.is_admin()) or owner_id = (select app.my_employee_id())));
 create policy clients_update on public.clients for update to authenticated
-  using (
-    (select app.is_admin()) or owner_id = (select app.my_employee_id())
-    or ((select app.my_role()) = 'caissiere' and exists (
-      select 1 from public.sales s where s.client_id = clients.id and s.boutique_id = (select app.my_location())))
-  );
+  using ((select app.is_admin()) or owner_id = (select app.my_employee_id()));
 create policy clients_delete on public.clients for delete to authenticated using ((select app.is_admin()));
 
 -- Prospects : tout employé peut en créer ; chacun voit les siens
@@ -139,10 +137,11 @@ create policy opportunities_delete on public.opportunities for delete to authent
 
 create policy quotes_select on public.quotes for select to authenticated
   using ((select app.is_admin()) or owner_id = (select app.my_employee_id()));
+-- Proformas : commerciaux et gestionnaire de stock (les leurs), administration
 create policy quotes_insert on public.quotes for insert to authenticated
-  with check ((select app.is_admin()) or ((select app.my_role()) = 'commercial' and owner_id = (select app.my_employee_id())));
+  with check ((select app.is_admin()) or ((select app.my_role()) in ('commercial', 'gestionnaire_stock') and owner_id = (select app.my_employee_id())));
 create policy quotes_update on public.quotes for update to authenticated
-  using ((select app.is_admin()) or ((select app.my_role()) = 'commercial' and owner_id = (select app.my_employee_id())));
+  using ((select app.is_admin()) or ((select app.my_role()) in ('commercial', 'gestionnaire_stock') and owner_id = (select app.my_employee_id())));
 create policy quotes_delete on public.quotes for delete to authenticated using ((select app.is_admin()));
 
 -- -----------------------------------------------------------------------------
@@ -166,7 +165,8 @@ create policy invoices_select on public.invoices for select to authenticated
     or ((select app.my_role()) = 'caissiere' and boutique_id = (select app.my_location()))
     or ((select app.my_role()) = 'commercial' and (
           exists (select 1 from public.clients c where c.id = invoices.client_id and c.owner_id = (select app.my_employee_id()))
-       or exists (select 1 from public.sales s where s.id = invoices.sale_id and s.seller_id = (select app.my_employee_id()))))
+       or exists (select 1 from public.sales s where s.id = invoices.sale_id and s.seller_id = (select app.my_employee_id()))
+       or exists (select 1 from public.quotes q where q.id = invoices.quote_id and q.owner_id = (select app.my_employee_id()))))
   );
 create policy invoices_insert on public.invoices for insert to authenticated
   with check ((select app.is_admin()) or ((select app.my_role()) = 'caissiere' and boutique_id = (select app.my_location())));
@@ -292,3 +292,16 @@ create policy activity_select on public.activity_logs for select to authenticate
   using ((select app.is_admin()) or user_id = (select app.my_employee_id()));
 create policy activity_insert on public.activity_logs for insert to authenticated
   with check (user_id = (select app.my_employee_id()));
+
+-- -----------------------------------------------------------------------------
+-- Caisse : la caissière voit et alimente la caisse de sa boutique ;
+-- l'administration voit toutes les caisses. Aucune modification ni suppression :
+-- le brouillard de caisse reste intact (une erreur se corrige par une opération inverse).
+-- -----------------------------------------------------------------------------
+create policy cash_select on public.cash_movements for select to authenticated
+  using ((select app.is_admin()) or ((select app.my_role()) = 'caissiere' and location_id = (select app.my_location())));
+create policy cash_insert on public.cash_movements for insert to authenticated
+  with check (
+    kind in ('apport', 'autre_entree', 'versement_banque', 'autre_sortie')
+    and ((select app.is_admin()) or ((select app.my_role()) = 'caissiere' and location_id = (select app.my_location())))
+  );

@@ -24,7 +24,7 @@ import { useAccess } from "@/hooks/use-access"
 import { useFilters, type FilterConfig } from "@/hooks/use-filters"
 import { useLookups } from "@/hooks/use-lookups"
 import { useTransientState } from "@/hooks/use-transient-state"
-import { ACCESS, DEFAULT_PASSWORD, SCOPE_LABEL } from "@/lib/access"
+import { ACCESS, DEFAULT_PASSWORD, SCOPE_LABEL, seesAllClients } from "@/lib/access"
 import { NETWORK_ERROR, toUserMessage } from "@/lib/errors"
 import { formatDate, formatDateTime } from "@/lib/format"
 import { contractType, department, employeeStatus, maritalStatus } from "@/lib/labels"
@@ -157,7 +157,9 @@ function InfoTab() {
                   <li key={m.href} className="flex items-center gap-3 rounded-lg border px-3 py-2 text-sm">
                     <m.icon className="size-4 shrink-0 text-primary" />
                     <span className="min-w-0 flex-1 truncate font-medium">{m.title}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{SCOPE_LABEL[p.scope]}{p.write ? "" : " · lecture"}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {m.module === "clients" && p.scope !== "all" && seesAllClients(role) ? "Tous les clients · modification des siens" : `${SCOPE_LABEL[p.scope]}${p.write ? "" : " · lecture"}`}
+                    </span>
                   </li>
                 )
               })}

@@ -106,7 +106,7 @@ create table if not exists public.products (
   unit text not null,
   purchase_price numeric(16, 2) not null check (purchase_price >= 0),
   sale_price numeric(16, 2) not null check (sale_price >= 0),
-  tax_rate numeric(5, 2) not null default 19.25,
+  tax_rate numeric(5, 2) not null default 0,
   min_stock integer not null default 0,
   status text not null default 'actif' check (status in ('actif', 'inactif')),
   barcode text,
@@ -387,10 +387,18 @@ create table if not exists public.attendance (
   check_in text,
   check_out text,
   break_minutes integer not null default 0 check (break_minutes between 0 and 240),
+  overtime_minutes integer not null default 0 check (overtime_minutes between 0 and 720),
   status text not null check (status in ('present', 'retard', 'absent', 'conge', 'mission')),
   note text,
   unique (employee_id, date)
 );
+-- Mise à niveau d'une base existante : TVA à 0 % par défaut sur les nouveaux produits
+alter table public.products alter column tax_rate set default 0;
+-- Mise à niveau d'une base existante : heures supplémentaires (en minutes)
+alter table public.attendance add column if not exists overtime_minutes integer not null default 0;
+do $$ begin
+  alter table public.attendance add constraint attendance_overtime_minutes_check check (overtime_minutes between 0 and 720);
+exception when duplicate_object then null; end $$;
 create index if not exists attendance_date_idx on public.attendance (date);
 
 create table if not exists public.leaves (
@@ -456,6 +464,40 @@ create table if not exists public.journal_entries (
   status text not null default 'valide' check (status in ('brouillon', 'valide'))
 );
 create index if not exists journal_entries_date_idx on public.journal_entries (date);
+
+-- -----------------------------------------------------------------------------
+-- Caisse : brouillard de caisse par site (boutique). Chaque entrée ou sortie
+-- d'espèces est tracée ; le solde = entrées − sorties. Aucune ligne n'est
+-- modifiable ni supprimable : une erreur se corrige par une opération inverse.
+-- -----------------------------------------------------------------------------
+create table if not exists public.cash_movements (
+  id text primary key default gen_random_uuid()::text,
+  number text not null unique,
+  date date not null default ((now() at time zone 'Africa/Douala')::date),
+  created_at timestamp not null default (now() at time zone 'Africa/Douala'),
+  location_id text not null,
+  direction text not null check (direction in ('entree', 'sortie')),
+  kind text not null check (kind in ('vente', 'encaissement', 'apport', 'autre_entree', 'depense', 'versement_banque', 'annulation', 'autre_sortie')),
+  amount numeric(16, 2) not null check (amount > 0),
+  label text not null,
+  reference text,
+  client_name text,
+  bank_name text,
+  bank_account text,
+  deposit_mode text check (deposit_mode is null or deposit_mode in ('especes', 'cheque', 'mobile_money')),
+  slip_number text,
+  depositor text,
+  sale_id text references public.sales (id) on delete set null,
+  payment_id text references public.payments (id) on delete set null,
+  expense_id text references public.expenses (id) on delete set null,
+  user_id text,
+  note text
+);
+create index if not exists cash_movements_location_idx on public.cash_movements (location_id, date desc, created_at desc);
+create index if not exists cash_movements_date_idx on public.cash_movements (date desc, id);
+create index if not exists cash_movements_payment_idx on public.cash_movements (payment_id) where payment_id is not null;
+create index if not exists cash_movements_expense_idx on public.cash_movements (expense_id) where expense_id is not null;
+create index if not exists cash_movements_sale_idx on public.cash_movements (sale_id) where sale_id is not null;
 
 -- -----------------------------------------------------------------------------
 -- Notifications & journal d'activité

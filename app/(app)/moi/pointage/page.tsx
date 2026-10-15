@@ -20,7 +20,7 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { useCurrentUser } from "@/hooks/use-access"
 import { useFilters, type FilterConfig } from "@/hooks/use-filters"
 import { useTransientState } from "@/hooks/use-transient-state"
-import { DAILY_MINUTES, WORK_START, lateMinutes, overtimeMinutes, workedMinutes } from "@/lib/calc"
+import { DAILY_MINUTES, WORK_START, lateMinutes, overtimeMinutes, recordedOvertime, workedMinutes } from "@/lib/calc"
 import { capitalize, formatDate, formatDuration, formatNumber, toISODate } from "@/lib/format"
 import { attendanceStatus, toOptions } from "@/lib/labels"
 import { useSubmitLock } from "@/components/shared/form-dialog"
@@ -84,9 +84,13 @@ export default function MyAttendancePage() {
   const clockOut = async () => {
     if (!todayRecord) return
     const time = format(new Date(), "HH:mm")
-    if (!(await update("attendance", todayRecord.id, { checkOut: time }))) return
+    // Heures supplémentaires : dépassement de la journée de 8 h (recalculé par la base)
+    const extra = overtimeMinutes({ ...todayRecord, checkOut: time })
+    if (!(await update("attendance", todayRecord.id, { checkOut: time, overtimeMinutes: extra }))) return
     log("Pointage", "Mon pointage", `Départ à ${time}`)
-    toast.success(`Départ enregistré à ${time}`, { description: `Temps de travail : ${formatDuration(workedMinutes({ ...todayRecord, checkOut: time }))}` })
+    toast.success(`Départ enregistré à ${time}`, {
+      description: `Temps de travail : ${formatDuration(workedMinutes({ ...todayRecord, checkOut: time }))}${extra ? ` · heures sup. : ${formatDuration(extra)}` : ""}`,
+    })
     setConfirmOut(false)
   }
 
@@ -103,11 +107,11 @@ export default function MyAttendancePage() {
     late: monthRows.filter((a) => a.status === "retard").length,
     lateMin: monthRows.reduce((s, a) => s + lateMinutes(a), 0),
     absent: monthRows.filter((a) => a.status === "absent").length,
-    overtime: monthRows.reduce((s, a) => s + overtimeMinutes(a), 0),
+    overtime: monthRows.reduce((s, a) => s + recordedOvertime(a), 0),
   }
 
   /* ---------- Historique ---------- */
-  const rows = React.useMemo<Row[]>(() => mine.map((a) => ({ ...a, worked: workedMinutes(a), late: lateMinutes(a), overtime: overtimeMinutes(a) })), [mine])
+  const rows = React.useMemo<Row[]>(() => mine.map((a) => ({ ...a, worked: workedMinutes(a), late: lateMinutes(a), overtime: recordedOvertime(a) })), [mine])
   const config = React.useMemo<FilterConfig<Row>>(
     () => ({
       date: { label: "Date", accessor: (r) => r.date, defaultPreset: "30d" },

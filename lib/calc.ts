@@ -78,8 +78,28 @@ export function lateMinutes(a: Pick<Attendance, "checkIn">) {
   return Math.max(0, start - (toMinutes(WORK_START) ?? 0))
 }
 
+/** Dépassement de la journée de 8 h (calcul brut à partir des heures pointées). */
 export function overtimeMinutes(a: Pick<Attendance, "checkIn" | "checkOut" | "breakMinutes">) {
   return Math.max(0, workedMinutes(a) - DAILY_MINUTES)
+}
+
+/** Heures supplémentaires retenues sur un pointage (saisie RH, sinon dépassement calculé). */
+export function recordedOvertime(a: Pick<Attendance, "checkIn" | "checkOut" | "breakMinutes" | "overtimeMinutes">) {
+  return a.overtimeMinutes ?? overtimeMinutes(a)
+}
+
+/** Plafond d'heures supplémentaires sur une journée (12 h, comme en base) */
+export const MAX_DAILY_OVERTIME = 720
+
+/**
+ * Montant des heures supplémentaires du mois (identique à app.overtime_pay) :
+ * taux horaire = base / 173,33 h, majoré de 20 % jusqu'à 32 h, 30 % jusqu'à 64 h, 40 % au-delà.
+ */
+export function overtimePay(baseSalary: number, minutes: number) {
+  const h = Math.max(0, minutes) / 60
+  const rate = baseSalary / 173.33
+  const amount = rate * (Math.min(h, 32) * 1.2 + Math.min(Math.max(h - 32, 0), 32) * 1.3 + Math.max(h - 64, 0) * 1.4)
+  return Math.round(amount / 100) * 100
 }
 
 /* ---------- Congés ---------- */

@@ -25,6 +25,7 @@ import {
   LuTarget,
   LuUserCog,
   LuUsers,
+  LuVault,
   LuWallet,
   LuWarehouse,
 } from "react-icons/lu"
@@ -82,6 +83,7 @@ export const NAV: NavGroup[] = [
     label: "Finance",
     items: [
       { title: "Comptabilité", href: "/comptabilite", icon: LuCalculator, description: "Journal, grand livre, balance", keywords: "ecritures syscohada", module: "comptabilite" },
+      { title: "Caisse", href: "/caisse", icon: LuVault, description: "Brouillard de caisse et versements en banque", keywords: "especes brouillard versement banque decaissement encaissement", module: "caisse" },
       { title: "Dépenses", href: "/depenses", icon: LuWallet, description: "Notes de frais et charges", keywords: "charges frais", module: "depenses" },
     ],
   },

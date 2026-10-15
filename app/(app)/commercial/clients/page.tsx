@@ -47,6 +47,7 @@ import { invoiceBalance, invoiceStatus as getInvoiceStatus, invoiceTotal } from 
 import { formatDate, formatMoney, formatNumber } from "@/lib/format"
 import { CITIES, clientSegment, clientStatus, invoiceStatus, opportunityStage, toOptions } from "@/lib/labels"
 import { useStore } from "@/lib/store"
+import { seesAllClients } from "@/lib/access"
 import type { Client } from "@/lib/types"
 
 type Row = Client & { revenue: number; balance: number; invoiceCount: number; lastPurchase: string | null }
@@ -59,7 +60,10 @@ export default function ClientsPage() {
   const remove = useStore((s) => s.remove)
   const { employeeName, employeeOptions } = useLookups(["employeeName", "employeeOptions"])
 
-  const { access } = useAccess()
+  const { access, user, role } = useAccess()
+  // Ceux qui facturent voient tous les clients, mais ne modifient que ceux qu'ils suivent
+  const seesAll = seesAllClients(role)
+  const canEdit = (c: Client) => acc.write && (acc.global || c.ownerId === user?.id)
   const canQuote = !!access("devis")?.write
   const [formOpen, setFormOpen] = useTransientState(false)
   const [editing, setEditing] = useTransientState<Client | undefined>(undefined)
@@ -133,7 +137,7 @@ export default function ClientsPage() {
     { id: "city", header: "Ville", accessor: (r) => r.city, hideOnMobile: true },
     { id: "phone", header: "Téléphone", accessor: (r) => r.phone, hideOnMobile: true, defaultHidden: true },
     { id: "email", header: "E-mail", accessor: (r) => r.email, defaultHidden: true },
-    { id: "owner", header: "Commercial", accessor: (r) => employeeName(r.ownerId), hideOnMobile: true, defaultHidden: !acc.global },
+    { id: "owner", header: "Commercial", accessor: (r) => employeeName(r.ownerId), hideOnMobile: true, defaultHidden: !acc.global && !seesAll },
     {
       id: "revenue",
       header: "CA total",
@@ -177,7 +181,7 @@ export default function ClientsPage() {
       />
 
       <StatGrid>
-        <StatCard index={0} label={acc.global ? "Clients (filtrés)" : "Mes clients"} value={formatNumber(data.length)} icon={LuUsers} hint={`sur ${formatNumber(rows.length)} au total`} />
+        <StatCard index={0} label={acc.global ? "Clients (filtrés)" : seesAll ? "Clients" : "Mes clients"} value={formatNumber(data.length)} icon={LuUsers} hint={`sur ${formatNumber(rows.length)} au total`} />
         <StatCard index={1} label="Clients actifs" value={formatNumber(kpis.active)} icon={LuUserCheck} tone="green" hint={`${formatNumber(kpis.inactive)} inactif(s)`} />
         <StatCard index={2} label="Chiffre d'affaires cumulé" value={formatMoney(kpis.revenue, { compact: true })} icon={LuCircleDollarSign} tone="blue" />
         <StatCard index={3} label="Encours client" value={formatMoney(kpis.balance, { compact: true })} icon={LuHourglass} tone="orange" hint="factures non soldées" />
@@ -207,8 +211,16 @@ export default function ClientsPage() {
                       <DropdownMenuItem
                         key={o.value}
                         onSelect={async () => {
-                          if (!(await updateMany("clients", selected.map((c) => c.id), { status: o.value }))) return
-                          toast.success(`${selected.length} client(s) passé(s) en « ${o.label} »`)
+                          const editable = selected.filter(canEdit)
+                          if (!editable.length) {
+                            toast.error("Modification impossible", { description: "Vous ne pouvez modifier que les clients dont vous êtes responsable." })
+                            return
+                          }
+                          if (!(await updateMany("clients", editable.map((c) => c.id), { status: o.value }))) return
+                          const skipped = selected.length - editable.length
+                          toast.success(`${editable.length} client(s) passé(s) en « ${o.label} »`, {
+                            description: skipped ? `${skipped} client(s) d'autres responsables non modifié(s).` : undefined,
+                          })
                           clear()
                         }}
                       >
@@ -228,7 +240,7 @@ export default function ClientsPage() {
               <RowActions
                 actions={[
                   { label: "Voir la fiche", icon: LuEye, onSelect: () => setViewing(r) },
-                  { label: "Modifier", icon: LuPencil, onSelect: () => openEdit(r), hidden: !acc.write },
+                  { label: "Modifier", icon: LuPencil, onSelect: () => openEdit(r), hidden: !canEdit(r) },
                   { label: "Programmer une relance", icon: LuBellRing, onSelect: () => setFollowPreset({ targetType: "client", targetId: r.id, subject: `Suivi client ${r.name}` }), hidden: !canFollowup },
                   { label: "Créer un devis", icon: LuFileText, onSelect: () => router.push("/commercial/devis?nouveau=1"), hidden: !canQuote },
                   { label: "Supprimer", icon: LuTrash2, destructive: true, separatorBefore: true, onSelect: () => setToDelete([r.id]), hidden: !acc.global || !acc.write },
@@ -257,15 +269,17 @@ export default function ClientsPage() {
                   <LuTrash2 /> Supprimer
                 </Button>
               )}
-              <Button
-                onClick={() => {
-                  const c = viewing
-                  setViewing(null)
-                  openEdit(c)
-                }}
-              >
-                <LuPencil /> Modifier
-              </Button>
+              {canEdit(viewing) && (
+                <Button
+                  onClick={() => {
+                    const c = viewing
+                    setViewing(null)
+                    openEdit(c)
+                  }}
+                >
+                  <LuPencil /> Modifier
+                </Button>
+              )}
             </>
           )
         }

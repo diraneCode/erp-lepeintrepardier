@@ -205,6 +205,23 @@ function LevelsTab({ onMovement, global }: { onMovement?: (p: MovementPreset) =>
             columns={columns}
             getRowId={(r) => r.id}
             defaultSort={{ id: "quantity" }}
+            selectable={!!onMovement}
+            bulkActions={onMovement && ((sel, clear) => {
+              // Les produits sélectionnés partagent un site : il est pré-rempli
+              const sites = new Set(sel.map((r) => r.locationId))
+              const open = (type: MovementPreset["type"]) => {
+                onMovement({ type, productIds: [...new Set(sel.map((r) => r.productId))], locationId: sites.size === 1 ? sel[0].locationId : undefined })
+                clear()
+              }
+              return (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => open("entree")}><LuPackagePlus /> Entrée</Button>
+                  <Button variant="outline" size="sm" onClick={() => open("sortie")}><LuPackageMinus /> Sortie</Button>
+                  <Button variant="outline" size="sm" onClick={() => open("transfert")}><LuArrowRightLeft /> Transférer</Button>
+                  <Button variant="outline" size="sm" onClick={() => open("ajustement")}><LuScale /> Inventaire</Button>
+                </>
+              )
+            })}
             exportOptions={{ filename: "etat-des-stocks", title: "État des stocks", subtitle: filters.describe(), summary: [{ label: "Valeur du stock", value: formatMoney(k.value) }, { label: "Unités", value: formatNumber(k.units) }, { label: "Sous le seuil", value: formatNumber(k.low) }, { label: "Ruptures", value: formatNumber(k.out) }] }}
             rowActions={onMovement && ((r) => (
               <RowActions

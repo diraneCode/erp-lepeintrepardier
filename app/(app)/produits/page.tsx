@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { toast } from "sonner"
-import { LuBoxes, LuCalendarX, LuCircleAlert, LuEye, LuPackage, LuPackageX, LuPencil, LuPlus, LuTag, LuTrash2 } from "react-icons/lu"
+import { LuArrowRightLeft, LuBoxes, LuCalendarX, LuCircleAlert, LuEye, LuPackage, LuPackagePlus, LuPackageX, LuPencil, LuPlus, LuTag, LuTrash2 } from "react-icons/lu"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,9 +17,10 @@ import { StatCard, StatGrid } from "@/components/shared/stat-card"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { UrlActions } from "@/components/shared/url-actions"
 import { CategoryFormDialog, ProductFormDialog } from "@/components/modules/products/forms"
+import { MovementFormDialog, type MovementPreset } from "@/components/modules/stock/movement-form"
 import { useFilters, type FilterConfig } from "@/hooks/use-filters"
 import { useLookups } from "@/hooks/use-lookups"
-import { useModuleAccess, useScopedData } from "@/hooks/use-access"
+import { useAccess, useModuleAccess, useScopedData } from "@/hooks/use-access"
 import { useTransientState } from "@/hooks/use-transient-state"
 import { formatDate, formatMoney, formatNumber, formatPercent } from "@/lib/format"
 import { productUnit, toOptions } from "@/lib/labels"
@@ -53,6 +54,9 @@ export default function ProductsPage() {
   const [categoryOpen, setCategoryOpen] = useTransientState(false)
   const [editingProduct, setEditingProduct] = useTransientState<Product | undefined>(undefined)
   const [editingCategory, setEditingCategory] = useTransientState<Category | undefined>(undefined)
+  // Entrée de stock pour plusieurs produits du catalogue (ex. stock initial)
+  const canStock = !!useAccess().access("stock")?.write
+  const [movement, setMovement] = useTransientState<MovementPreset | undefined>(undefined)
 
   return (
     <Page>
@@ -83,6 +87,7 @@ export default function ProductsPage() {
           <CatalogTab
             onNew={() => { setEditingProduct(undefined); setProductOpen(true) }}
             onEdit={acc.write ? (p) => { setEditingProduct(p); setProductOpen(true) } : undefined}
+            onStock={canStock ? (productIds, type) => setMovement({ type, productIds }) : undefined}
           />
         </TabsContent>
         <TabsContent value="categories">
@@ -91,11 +96,12 @@ export default function ProductsPage() {
       </Tabs>
       <ProductFormDialog open={productOpen} onOpenChange={setProductOpen} product={editingProduct} />
       <CategoryFormDialog open={categoryOpen} onOpenChange={setCategoryOpen} category={editingCategory} />
+      <MovementFormDialog open={!!movement} onOpenChange={(o) => !o && setMovement(undefined)} preset={movement} />
     </Page>
   )
 }
 
-function CatalogTab({ onEdit, onNew }: { onEdit?: (p: Product) => void; onNew: () => void }) {
+function CatalogTab({ onEdit, onNew, onStock }: { onEdit?: (p: Product) => void; onNew: () => void; onStock?: (productIds: string[], type: MovementPreset["type"]) => void }) {
   const products = useStore((s) => s.products)
   const { stockLevels, sales } = useScopedData(["stockLevels", "sales"])
   const update = useStore((s) => s.update)
@@ -251,17 +257,31 @@ function CatalogTab({ onEdit, onNew }: { onEdit?: (p: Product) => void; onNew: (
             columns={columns}
             getRowId={(p) => p.id}
             onRowClick={setViewing}
-            selectable={!!onEdit}
+            selectable={!!onEdit || !!onStock}
             defaultSort={{ id: "name" }}
             exportOptions={{ filename: "catalogue-produits", title: "Catalogue produits", subtitle: filters.describe(), summary: [{ label: "Références", value: formatNumber(data.length) }, { label: "Valeur du stock", value: formatMoney(k.value) }, { label: "Marge moyenne", value: formatPercent(k.margin) }] }}
             bulkActions={(sel, clear) => (
               <>
+                {onStock && (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => { onStock(sel.map((p) => p.id), "entree"); clear() }}>
+                      <LuPackagePlus /> Entrée de stock
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => { onStock(sel.map((p) => p.id), "transfert"); clear() }}>
+                      <LuArrowRightLeft /> Transférer
+                    </Button>
+                  </>
+                )}
+                {onEdit && (
+                <>
                 <Button variant="outline" size="sm" onClick={async () => { if (!(await updateMany("products", sel.map((p) => p.id), { status: "inactif" }))) return; toast.success(`${sel.length} produit(s) désactivé(s)`); clear() }}>
                   Désactiver
                 </Button>
                 <Button variant="destructive" size="sm" onClick={() => setToDelete(sel.map((p) => p.id))}>
                   <LuTrash2 /> Supprimer
                 </Button>
+                </>
+                )}
               </>
             )}
             rowActions={(p) => (
