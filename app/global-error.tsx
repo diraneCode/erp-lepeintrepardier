@@ -16,8 +16,7 @@ export default function GlobalError({ error, retry }: { error: Error & { digest?
           <div style={{ maxWidth: 420, textAlign: "center" }}>
             <h1 style={{ fontSize: 20, margin: "0 0 8px" }}>L&apos;application a rencontré un problème</h1>
             <p style={{ fontSize: 14, color: "#6b6880", margin: "0 0 20px" }}>
-              Rechargez la page. Si le problème persiste, contactez l&apos;administrateur
-              {error.digest ? ` (référence : ${error.digest})` : ""}.
+              Rechargez la page. Si le problème persiste, contactez l&apos;administrateur.
             </p>
             <button
               onClick={() => retry()}

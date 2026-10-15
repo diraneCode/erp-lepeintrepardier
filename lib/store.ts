@@ -4,6 +4,8 @@ import { useEffect, useSyncExternalStore } from "react"
 import { useQuery, type QueryKey } from "@tanstack/react-query"
 import { toast } from "sonner"
 
+import { errorTitle, toUserMessage } from "@/lib/errors"
+
 import type { SeedData } from "@/lib/data/seed"
 import { queryClient } from "@/lib/query-client"
 import { getSupabase } from "@/lib/supabase/client"
@@ -157,31 +159,19 @@ const ME_KEY: QueryKey = ["me"]
 
 type DbError = { code?: string; message?: string; details?: string } | null | undefined
 
-/** Message lisible pour une erreur Postgres / PostgREST. */
-export function errorMessage(error: DbError | Error): string {
-  const e = error as { code?: string; message?: string }
-  switch (e?.code) {
-    case "42501":
-      return e.message && !/row-level security|permission denied/i.test(e.message) ? e.message : "Action non autorisée pour votre profil."
-    case "23505":
-      return "Cette valeur existe déjà (code, numéro ou e-mail en double)."
-    case "23503":
-      return "Cet élément est lié à d'autres données : opération impossible."
-    case "23514":
-      return "Une valeur saisie est invalide."
-    case "PGRST116":
-      return "Élément introuvable ou non accessible."
-    default:
-      if (!e?.message) return "Une erreur est survenue."
-      if (/Failed to fetch|NetworkError|network/i.test(e.message)) return "Connexion au serveur impossible. Vérifiez votre réseau."
-      return e.message
-  }
+/** Message lisible (jamais de détail technique), voir lib/errors.ts. */
+export function errorMessage(error: DbError | Error | unknown): string {
+  return toUserMessage(error)
 }
 
-function fail(error: DbError | Error) {
-  toast.error(errorMessage(error))
+/** Affiche l'erreur à l'utilisateur ; le détail technique ne va qu'en console. */
+function fail(error: DbError | Error | unknown) {
+  console.error(error)
+  toast.error(errorTitle(error), { description: errorMessage(error) })
   return false as const
 }
+
+const BY_SAME_PASSWORD = "Le nouveau mot de passe doit être différent de l'actuel."
 
 /* ---------- Lecture ---------- */
 
@@ -301,11 +291,11 @@ async function employeeApi(method: "POST" | "PATCH" | "DELETE", body: unknown) {
       body: JSON.stringify(body),
     })
   } catch {
-    return fail(new Error("Connexion au serveur impossible. Vérifiez votre réseau."))
+    return fail(new TypeError("Failed to fetch"))
   }
   if (res.ok) return true
   const payload = (await res.json().catch(() => null)) as { error?: string } | null
-  return fail(new Error(payload?.error ?? "Opération refusée par le serveur."))
+  return fail({ message: payload?.error ?? "", status: res.status })
 }
 
 /* ---------- Actions ---------- */
@@ -372,8 +362,7 @@ const rawActions: Actions = {
     const supabase = getSupabase()
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
     if (error) {
-      if (/invalid login credentials/i.test(error.message)) return "Adresse e-mail ou mot de passe incorrect"
-      if (/email not confirmed/i.test(error.message)) return "Adresse e-mail non confirmée. Contactez l'administrateur."
+      console.error(error)
       return errorMessage(error)
     }
     queryClient.clear()
@@ -396,14 +385,18 @@ const rawActions: Actions = {
     const supabase = getSupabase()
     const { data } = await supabase.auth.getSession()
     const email = data.session?.user.email
-    if (!email) return "Session expirée, reconnectez-vous."
+    if (!email) return "Votre session a expiré. Reconnectez-vous."
     // Vérifie le mot de passe actuel avant de le remplacer
     const check = await supabase.auth.signInWithPassword({ email, password: current })
-    if (check.error) return "Mot de passe actuel incorrect"
+    if (check.error) {
+      console.error(check.error)
+      return /invalid login credentials/i.test(check.error.message) ? "Mot de passe actuel incorrect." : errorMessage(check.error)
+    }
     const { error } = await supabase.auth.updateUser({ password: next })
     if (error) {
-      if (/different from the old/i.test(error.message)) return "Le nouveau mot de passe doit être différent de l'actuel"
-      if (/weak|at least/i.test(error.message)) return "Mot de passe trop faible"
+      console.error(error)
+      if (/different from the old/i.test(error.message)) return BY_SAME_PASSWORD
+      if (/weak|at least|characters/i.test(error.message)) return "Mot de passe trop faible : choisissez-en un plus robuste."
       return errorMessage(error)
     }
     rawActions.log("Sécurité", "Compte", "Changement de mot de passe")

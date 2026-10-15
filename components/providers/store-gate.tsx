@@ -74,7 +74,7 @@ function DataBoundary({ pathname, children }: { pathname: string; children: Reac
   const blocked = !ready && (loading || failed)
   return (
     <>
-      {blocked && (failed ? <LoadError message="Une partie des données n'a pas pu être chargée." onRetry={retry} /> : <PageSkeleton />)}
+      {blocked && (failed ? <LoadError message="Une partie des données n'a pas pu être chargée. Vérifiez votre connexion puis réessayez." onRetry={retry} /> : <PageSkeleton />)}
       <div className={blocked ? "hidden" : "contents"}>
         {children}
       </div>
@@ -132,7 +132,7 @@ function LoadError({ message, onRetry }: { message: string; onRetry: () => void 
             <LuWifiOff />
           </EmptyMedia>
           <EmptyTitle>Chargement impossible</EmptyTitle>
-          <EmptyDescription>{message} Vérifiez votre connexion puis réessayez.</EmptyDescription>
+          <EmptyDescription>{message}</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
           <Button onClick={onRetry}>

@@ -408,7 +408,7 @@ function CategoriesTab({ onEdit }: { onEdit?: (c: Category) => void }) {
         onConfirm={async () => {
           if (!toDelete) return
           if ((stats.get(toDelete.id)?.count ?? 0) > 0) {
-            toast.error("Suppression impossible", { description: "La catégorie contient des produits." })
+            toast.error("Suppression impossible", { description: "Cette catégorie contient encore des produits : déplacez-les ou supprimez-les d'abord." })
           } else {
             if (!(await remove("categories", [toDelete.id]))) return
             toast.success("Catégorie supprimée")

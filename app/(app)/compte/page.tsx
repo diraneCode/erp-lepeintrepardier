@@ -25,6 +25,7 @@ import { useFilters, type FilterConfig } from "@/hooks/use-filters"
 import { useLookups } from "@/hooks/use-lookups"
 import { useTransientState } from "@/hooks/use-transient-state"
 import { ACCESS, DEFAULT_PASSWORD, SCOPE_LABEL } from "@/lib/access"
+import { NETWORK_ERROR, toUserMessage } from "@/lib/errors"
 import { formatDate, formatDateTime } from "@/lib/format"
 import { contractType, department, employeeStatus, maritalStatus } from "@/lib/labels"
 import { NAV_ITEMS } from "@/lib/nav"
@@ -286,7 +287,9 @@ function AdminTab() {
     setConfirmReset(false)
     if (!res?.ok) {
       const payload = (await res?.json().catch(() => null)) as { error?: string } | null
-      toast.error(payload?.error ?? "Réinitialisation impossible")
+      toast.error("Réinitialisation impossible", {
+        description: res ? toUserMessage({ message: payload?.error ?? "", status: res.status }, "La réinitialisation du mot de passe a échoué. Réessayez.") : NETWORK_ERROR,
+      })
       return
     }
     toast.success("Mot de passe réinitialisé", { description: `${label} : ${DEFAULT_PASSWORD}` })

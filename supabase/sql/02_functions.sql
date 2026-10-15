@@ -194,12 +194,14 @@ begin
   if (select auth.uid()) is null then return new; end if;
   select * into inv from public.invoices where id = new.invoice_id for update;
   if inv.status in ('brouillon', 'annulee') then
-    raise exception 'Impossible d''encaisser une facture %', inv.status using errcode = 'P0001';
+    raise exception '%', case inv.status
+      when 'brouillon' then 'Impossible d''encaisser une facture en brouillon : émettez-la d''abord'
+      else 'Impossible d''encaisser une facture annulée' end using errcode = 'P0001';
   end if;
   select total into v_total from app.doc_totals(inv.items);
   v_paid := inv.amount_paid + new.amount;
   if v_paid > v_total + 1 then
-    raise exception 'Le montant dépasse le reste à payer' using errcode = 'P0001';
+    raise exception 'Le montant encaissé dépasse le reste à payer de la facture' using errcode = 'P0001';
   end if;
   update public.invoices
     set amount_paid = v_paid, status = case when v_paid >= v_total then 'payee' else 'partielle' end
@@ -269,7 +271,9 @@ begin
   if new.type in ('sortie', 'transfert') then
     select quantity into v_available from public.stock_levels where product_id = new.product_id and location_id = new.from_location_id;
     if coalesce(v_available, 0) < new.quantity then
-      raise exception 'Stock insuffisant (% disponible)', coalesce(v_available, 0) using errcode = 'P0001';
+      raise exception 'Stock insuffisant pour « % » : % disponible(s), % demandé(s)',
+        (select p.name from public.products p where p.id = new.product_id),
+        coalesce(v_available, 0), new.quantity using errcode = 'P0001';
     end if;
   end if;
   return new;
@@ -411,7 +415,7 @@ declare
   v_total numeric;
 begin
   if v_role is null or v_role not in ('super_admin', 'commercial', 'caissiere') then
-    raise exception 'Accès refusé' using errcode = '42501';
+    raise exception 'Accès refusé : cette action n''est pas autorisée pour votre profil' using errcode = '42501';
   end if;
   v_sale := jsonb_populate_record(null::public.sales, p_sale);
   v_sale.id := coalesce(v_sale.id, gen_random_uuid()::text);
@@ -423,7 +427,7 @@ begin
     raise exception 'Vente hors de votre boutique' using errcode = '42501';
   end if;
   if v_sale.status = 'annulee' then
-    raise exception 'Statut invalide' using errcode = 'P0001';
+    raise exception 'Une vente ne peut pas être enregistrée directement comme annulée' using errcode = 'P0001';
   end if;
   if v_sale.payment_method = 'credit' and v_sale.client_id is null then
     raise exception 'Une vente à crédit doit être rattachée à un client' using errcode = 'P0001';
@@ -473,7 +477,7 @@ begin
   if not (v_role = 'super_admin'
           or (v_role = 'caissiere' and v_sale.boutique_id = app.my_location())
           or (v_role = 'commercial' and v_sale.seller_id = app.my_employee_id())) then
-    raise exception 'Accès refusé' using errcode = '42501';
+    raise exception 'Accès refusé : cette action n''est pas autorisée pour votre profil' using errcode = '42501';
   end if;
   if v_sale.status = 'annulee' then return; end if;
   if v_sale.status <> 'brouillon' then
@@ -504,7 +508,7 @@ begin
   select * into v_quote from public.quotes where id = p_quote_id for update;
   if not found then raise exception 'Proforma introuvable' using errcode = 'P0002'; end if;
   if not (app.is_admin() or (app.my_role() = 'commercial' and v_quote.owner_id = app.my_employee_id())) then
-    raise exception 'Accès refusé' using errcode = '42501';
+    raise exception 'Accès refusé : cette action n''est pas autorisée pour votre profil' using errcode = '42501';
   end if;
   if v_quote.invoice_id is not null then
     raise exception 'Cette proforma a déjà été facturée' using errcode = 'P0001';
@@ -533,7 +537,7 @@ begin
   select * into v_p from public.prospects where id = p_id for update;
   if not found then raise exception 'Prospect introuvable' using errcode = 'P0002'; end if;
   if not (app.is_admin() or v_p.owner_id = app.my_employee_id()) then
-    raise exception 'Accès refusé' using errcode = '42501';
+    raise exception 'Accès refusé : cette action n''est pas autorisée pour votre profil' using errcode = '42501';
   end if;
   if v_p.status = 'converti' then return null; end if;
   insert into public.clients (code, type, name, contact_name, email, phone, city, address, segment, status, owner_id, credit_limit, notes)
@@ -556,7 +560,7 @@ begin
   select * into v_f from public.followups where id = p_id for update;
   if not found then raise exception 'Relance introuvable' using errcode = 'P0002'; end if;
   if not (app.is_admin() or v_f.owner_id = app.my_employee_id()) then
-    raise exception 'Accès refusé' using errcode = '42501';
+    raise exception 'Accès refusé : cette action n''est pas autorisée pour votre profil' using errcode = '42501';
   end if;
   if length(trim(coalesce(p_outcome, ''))) < 3 then
     raise exception 'Compte rendu requis' using errcode = 'P0001';
@@ -586,7 +590,7 @@ declare
   v_n integer;
 begin
   if v_role is null or v_role not in ('super_admin', 'commercial', 'caissiere') then
-    raise exception 'Accès refusé' using errcode = '42501';
+    raise exception 'Accès refusé : cette action n''est pas autorisée pour votre profil' using errcode = '42501';
   end if;
 
   insert into public.followups (target_type, target_id, subject, channel, priority, due_date, status, owner_id)
@@ -620,8 +624,8 @@ create or replace function public.generate_payslips(p_period text)
 returns integer language plpgsql security definer set search_path = '' as $$
 declare v_n integer;
 begin
-  if not app.is_admin() then raise exception 'Accès refusé' using errcode = '42501'; end if;
-  if p_period !~ '^\d{4}-\d{2}$' then raise exception 'Période invalide' using errcode = 'P0001'; end if;
+  if not app.is_admin() then raise exception 'Accès refusé : cette action n''est pas autorisée pour votre profil' using errcode = '42501'; end if;
+  if p_period !~ '^\d{4}-\d{2}$' then raise exception 'Période de paie invalide' using errcode = 'P0001'; end if;
   insert into public.payslips (employee_id, period, base_salary, overtime, bonuses, transport_allowance, housing_allowance, other_deductions, status)
   select e.id, p_period, e.base_salary, 0, 0,
          case when e.base_salary < 300000 then 25000 else 40000 end,

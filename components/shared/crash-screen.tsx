@@ -9,6 +9,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 
 /** Écran affiché lorsqu'une page plante : message clair, réessayer, retour à l'accueil. */
 export function CrashScreen({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
+  // Le détail technique reste dans la console, jamais à l'écran
   React.useEffect(() => {
     console.error(error)
   }, [error])
@@ -23,7 +24,7 @@ export function CrashScreen({ error, retry }: { error: Error & { digest?: string
           <EmptyTitle>Une erreur inattendue est survenue</EmptyTitle>
           <EmptyDescription>
             Cette page n&apos;a pas pu s&apos;afficher. Vos données enregistrées ne sont pas affectées. Réessayez ; si le problème persiste, contactez
-            l&apos;administrateur{error.digest ? ` (référence : ${error.digest})` : ""}.
+            l&apos;administrateur.
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent className="flex-row justify-center gap-2">

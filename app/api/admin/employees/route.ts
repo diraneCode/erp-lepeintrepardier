@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { DEFAULT_PASSWORD } from "@/lib/access"
+import { toUserMessage } from "@/lib/errors"
 import { createSupabaseAdminClient } from "@/lib/supabase/admin"
 import { toDb } from "@/lib/supabase/mapping"
 import { isSupabaseConfigured } from "@/lib/supabase/env"
@@ -79,31 +80,36 @@ async function readJson(request: Request) {
   }
 }
 
+/** Réponse d'erreur sans détail technique (le détail est journalisé côté serveur). */
 function dbError(e: { code?: string; message?: string } | null) {
+  console.error("[api/admin/employees]", e)
   if (e?.code === "23505") return error("Un employé utilise déjà ce matricule ou cet e-mail.", 409)
   if (e?.code === "23503") return error("Cet employé est lié à des ventes, clients ou documents : passez plutôt son statut à « Sorti ».", 409)
-  return error(e?.message ?? "Erreur de base de données", 500)
+  return error(toUserMessage(e, "L'enregistrement de l'employé a échoué. Réessayez."), 500)
 }
 
-export async function POST(request: Request) {
+function authError(e: { code?: string; message?: string; status?: number } | null, fallback: string) {
+  console.error("[api/admin/employees]", e)
+  if (/already|registered|exists/i.test(e?.message ?? "")) return error("Un compte existe déjà avec cette adresse e-mail.", 409)
+  return error(toUserMessage(e, fallback), 500)
+}
+
+async function handlePOST(request: Request) {
   const admin = await requireAdmin()
   if (!admin) return error("Action réservée au super administrateur.", 403)
   const parsed = employeeSchema.safeParse(await readJson(request))
-  if (!parsed.success) return error("Données de l'employé invalides.")
+  if (!parsed.success) return error("Certaines informations de l'employé sont invalides. Vérifiez le formulaire.")
   const employee = parsed.data
   const db = createSupabaseAdminClient()
 
-  const { data: created, error: authError } = await db.auth.admin.createUser({
+  const { data: created, error: createError } = await db.auth.admin.createUser({
     email: employee.email.toLowerCase(),
     password: DEFAULT_PASSWORD,
     email_confirm: true,
     user_metadata: { employee_id: employee.id, first_name: employee.firstName, last_name: employee.lastName },
     ...(INACTIVE.has(employee.status) ? { ban_duration: BAN } : {}),
   })
-  if (authError || !created.user) {
-    if (/already|registered|exists/i.test(authError?.message ?? "")) return error("Un compte existe déjà avec cet e-mail.", 409)
-    return error(authError?.message ?? "Création du compte impossible", 500)
-  }
+  if (createError || !created.user) return authError(createError, "La création du compte de connexion a échoué. Réessayez.")
 
   const { error: insertError } = await db
     .from("employees")
@@ -117,11 +123,11 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: true }, { status: 201 })
 }
 
-export async function PATCH(request: Request) {
+async function handlePATCH(request: Request) {
   const admin = await requireAdmin()
   if (!admin) return error("Action réservée au super administrateur.", 403)
   const parsed = patchSchema.safeParse(await readJson(request))
-  if (!parsed.success) return error("Requête invalide.")
+  if (!parsed.success) return error("Les informations envoyées sont incomplètes ou invalides.")
   const { id, patch, resetPassword } = parsed.data
   const db = createSupabaseAdminClient()
 
@@ -135,7 +141,7 @@ export async function PATCH(request: Request) {
   if (resetPassword) {
     if (!current.user_id) return error("Cet employé n'a pas de compte de connexion.")
     const { error: e } = await db.auth.admin.updateUserById(current.user_id, { password: DEFAULT_PASSWORD })
-    if (e) return error(e.message, 500)
+    if (e) return authError(e, "La réinitialisation du mot de passe a échoué. Réessayez.")
     await db.from("activity_logs").insert({ user_id: admin.id, action: "Sécurité", module: "Employés", details: `Réinitialisation du mot de passe (${current.email})` })
     return NextResponse.json({ ok: true })
   }
@@ -150,7 +156,7 @@ export async function PATCH(request: Request) {
     if (patch.status && INACTIVE.has(patch.status) !== INACTIVE.has(current.status)) attrs.ban_duration = INACTIVE.has(patch.status) ? BAN : "none"
     if (Object.keys(attrs).length) {
       const { error: e } = await db.auth.admin.updateUserById(current.user_id, attrs)
-      if (e) return error(/already|exists/i.test(e.message) ? "Un compte existe déjà avec cet e-mail." : e.message, 409)
+      if (e) return authError(e, "La mise à jour du compte de connexion a échoué. Réessayez.")
     }
   }
 
@@ -162,11 +168,11 @@ export async function PATCH(request: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(request: Request) {
+async function handleDELETE(request: Request) {
   const admin = await requireAdmin()
   if (!admin) return error("Action réservée au super administrateur.", 403)
   const parsed = deleteSchema.safeParse(await readJson(request))
-  if (!parsed.success) return error("Requête invalide.")
+  if (!parsed.success) return error("Les informations envoyées sont incomplètes ou invalides.")
   const ids = parsed.data.ids.filter((id) => id !== admin.id)
   if (!ids.length) return error("Vous ne pouvez pas supprimer votre propre compte.")
   const db = createSupabaseAdminClient()
@@ -185,3 +191,19 @@ export async function DELETE(request: Request) {
   }
   return NextResponse.json({ ok: true })
 }
+
+/** Toute exception inattendue renvoie un message neutre (détail dans les journaux serveur). */
+function guarded(handler: (request: Request) => Promise<Response>) {
+  return async (request: Request) => {
+    try {
+      return await handler(request)
+    } catch (e) {
+      console.error("[api/admin/employees]", e)
+      return error("Le serveur n'a pas pu traiter la demande. Réessayez dans un instant.", 500)
+    }
+  }
+}
+
+export const POST = guarded(handlePOST)
+export const PATCH = guarded(handlePATCH)
+export const DELETE = guarded(handleDELETE)

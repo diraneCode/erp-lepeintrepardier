@@ -301,7 +301,7 @@ export default function EmployeesPage() {
                         <div className="truncate text-xs text-muted-foreground">{f ? `${f.name} · ${formatFileSize(f.size)}` : "Manquant"}</div>
                       </div>
                       {f ? (
-                        <Button variant="outline" size="xs" onClick={() => void openFile(f).then((ok) => !ok && toast.error("Fichier introuvable ou inaccessible"))}>
+                        <Button variant="outline" size="xs" onClick={() => void openFile(f).then((ok) => !ok && toast.error("Ouverture impossible", { description: "Le fichier est introuvable ou vous n'avez pas les droits pour le consulter." }))}>
                           <LuEye /> Ouvrir
                         </Button>
                       ) : (
