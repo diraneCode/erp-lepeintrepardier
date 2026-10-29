@@ -289,13 +289,50 @@ create table if not exists public.stock_movements (
   quantity integer not null check (quantity <> 0),
   from_location_id text,
   to_location_id text,
-  reason text not null,
-  reference text not null,
+  reason text not null check (length(trim(reason)) > 0),
+  reference text,
   user_id text
 );
+-- Mise à niveau : référence facultative, motif saisi librement (non vide)
+alter table public.stock_movements alter column reference drop not null;
+do $$ begin
+  alter table public.stock_movements add constraint stock_movements_reason_not_blank check (length(trim(reason)) > 0);
+exception when duplicate_object then null; end $$;
 create index if not exists stock_movements_date_idx on public.stock_movements (date);
 create index if not exists stock_movements_from_idx on public.stock_movements (from_location_id);
 create index if not exists stock_movements_to_idx on public.stock_movements (to_location_id);
+
+-- Inventaires : comptage physique d'un site, écarts puis ajustement du stock
+create table if not exists public.inventories (
+  id text primary key default gen_random_uuid()::text,
+  number text not null unique,
+  location_id text not null,
+  date date not null default ((now() at time zone 'Africa/Douala')::date),
+  label text not null,
+  scope text not null default 'stock' check (scope in ('all', 'stock', 'category', 'selection')),
+  category_id text references public.categories (id) on delete set null,
+  status text not null default 'en_cours' check (status in ('en_cours', 'valide', 'annule')),
+  note text,
+  created_by text,
+  created_at timestamp not null default (now() at time zone 'Africa/Douala'),
+  validated_by text,
+  validated_at timestamp,
+  adjustments integer not null default 0
+);
+create index if not exists inventories_location_idx on public.inventories (location_id, date desc);
+create index if not exists inventories_date_idx on public.inventories (date desc, id);
+
+create table if not exists public.inventory_lines (
+  id text primary key default gen_random_uuid()::text,
+  inventory_id text not null references public.inventories (id) on delete cascade,
+  product_id text not null references public.products (id) on delete cascade,
+  expected integer not null default 0,
+  counted integer check (counted is null or counted >= 0),
+  comment text,
+  counted_at timestamp,
+  unique (inventory_id, product_id)
+);
+create index if not exists inventory_lines_product_idx on public.inventory_lines (product_id);
 
 -- -----------------------------------------------------------------------------
 -- Marketing

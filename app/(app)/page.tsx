@@ -377,7 +377,7 @@ function Dashboard() {
               { href: "/facturation?nouveau=1", label: "Nouvelle facture", icon: LuReceipt, module: "facturation" as const },
               { href: "/commercial/clients?nouveau=1", label: "Nouveau client", icon: LuUsers, module: "clients" as const },
               { href: "/depenses?nouveau=1", label: "Nouvelle dépense", icon: LuWallet, module: "depenses" as const },
-              { href: "/commercial/devis?nouveau=1", label: "Nouveau devis", icon: LuPlus, module: "devis" as const },
+              { href: "/commercial/devis?nouveau=1", label: "Nouvelle proforma", icon: LuPlus, module: "devis" as const },
               { href: "/stock", label: "Mouvement de stock", icon: LuPackageX, module: "stock" as const },
               { href: "/moi/conges?nouveau=1", label: "Demander un congé", icon: LuCalendarDays, module: undefined },
             ]

@@ -13,6 +13,8 @@ import type {
   CampaignChannel,
   CashKind,
   DepositMode,
+  InventoryScope,
+  InventoryStatus,
   CampaignStatus,
   ClientSegment,
   ClientStatus,
@@ -397,3 +399,18 @@ export const BANKS = [
   "Access Bank Cameroun",
   "Citibank Cameroun",
 ]
+
+/* ---------- Inventaire ---------- */
+
+export const inventoryStatus: LabelMap<InventoryStatus> = {
+  en_cours: { label: "En cours", tone: "warning" },
+  valide: { label: "Validé", tone: "success" },
+  annule: { label: "Annulé", tone: "neutral" },
+}
+
+export const inventoryScope: Record<InventoryScope, string> = {
+  stock: "Produits en stock sur le site",
+  all: "Tous les produits actifs",
+  category: "Une catégorie",
+  selection: "Sélection de produits",
+}

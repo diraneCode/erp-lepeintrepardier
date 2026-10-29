@@ -93,6 +93,7 @@ begin
       when 'prospect' then 'PRO-' || lpad(v_n::text, 4, '0')
       when 'employee' then 'LPP-' || lpad(v_n::text, 4, '0')
       when 'cash' then 'CAI-' || v_year || '-' || lpad(v_n::text, 5, '0')
+      when 'inventory' then 'INV-' || v_year || '-' || lpad(v_n::text, 4, '0')
     end;
     execute format('select exists (select 1 from %I.%I where %I = $1)', tg_table_schema, tg_table_name, v_col)
       into v_dup using v_candidate;
@@ -119,6 +120,8 @@ drop trigger if exists number_prospects on public.prospects;
 create trigger number_prospects before insert on public.prospects for each row execute function app.assign_number('prospect', 'code');
 drop trigger if exists number_employees on public.employees;
 create trigger number_employees before insert on public.employees for each row execute function app.assign_number('employee', 'matricule');
+drop trigger if exists number_inventories on public.inventories;
+create trigger number_inventories before insert on public.inventories for each row execute function app.assign_number('inventory', 'number');
 drop trigger if exists number_cash on public.cash_movements;
 create trigger number_cash before insert on public.cash_movements for each row execute function app.assign_number('cash', 'number');
 
@@ -448,14 +451,14 @@ declare
   v_sub numeric;
   v_tax numeric;
 begin
-  if v_role is null or v_role not in ('super_admin', 'commercial', 'caissiere') then
+  if v_role is null then
     raise exception 'Accès refusé : cette action n''est pas autorisée pour votre profil' using errcode = '42501';
   end if;
   v_sale := jsonb_populate_record(null::public.sales, p_sale);
   v_sale.id := coalesce(v_sale.id, gen_random_uuid()::text);
   v_sale.number := coalesce(v_sale.number, '');
-  if v_role = 'commercial' and v_sale.seller_id <> v_me then
-    raise exception 'Un commercial ne peut enregistrer que ses propres ventes' using errcode = '42501';
+  if v_role not in ('super_admin', 'caissiere') and v_sale.seller_id <> v_me then
+    raise exception 'Vous ne pouvez enregistrer que vos propres ventes' using errcode = '42501';
   end if;
   if v_role = 'caissiere' and v_sale.boutique_id <> app.my_location() then
     raise exception 'Vente hors de votre boutique' using errcode = '42501';
@@ -528,7 +531,7 @@ begin
   if not found then raise exception 'Vente introuvable' using errcode = 'P0002'; end if;
   if not (v_role = 'super_admin'
           or (v_role = 'caissiere' and v_sale.boutique_id = app.my_location())
-          or (v_role = 'commercial' and v_sale.seller_id = app.my_employee_id())) then
+          or (v_role is not null and v_sale.seller_id = app.my_employee_id())) then
     raise exception 'Accès refusé : cette action n''est pas autorisée pour votre profil' using errcode = '42501';
   end if;
   if v_sale.status = 'annulee' then return; end if;
@@ -580,7 +583,7 @@ declare
 begin
   select * into v_quote from public.quotes where id = p_quote_id for update;
   if not found then raise exception 'Proforma introuvable' using errcode = 'P0002'; end if;
-  if not (app.is_admin() or (app.my_role() = 'commercial' and v_quote.owner_id = app.my_employee_id())) then
+  if not (app.is_admin() or (app.my_employee_id() is not null and v_quote.owner_id = app.my_employee_id())) then
     raise exception 'Accès refusé : cette action n''est pas autorisée pour votre profil' using errcode = '42501';
   end if;
   if v_quote.invoice_id is not null then
@@ -662,7 +665,7 @@ declare
   v_count integer := 0;
   v_n integer;
 begin
-  if v_role is null or v_role not in ('super_admin', 'commercial', 'caissiere') then
+  if v_role is null then
     raise exception 'Accès refusé : cette action n''est pas autorisée pour votre profil' using errcode = '42501';
   end if;
 
@@ -673,7 +676,7 @@ begin
   from public.invoices i
   join public.clients c on c.id = i.client_id
   where i.status in ('emise', 'partielle') and i.due_date < current_date
-    and (v_role = 'super_admin' or (v_role = 'caissiere' and i.boutique_id = v_loc) or (v_role = 'commercial' and c.owner_id = v_me))
+    and (v_role = 'super_admin' or (v_role = 'caissiere' and i.boutique_id = v_loc) or (v_role <> 'caissiere' and c.owner_id = v_me))
     and not exists (select 1 from public.followups f where f.target_type = 'facture' and f.target_id = i.id and f.status in ('a_faire', 'reporte'));
   get diagnostics v_n = row_count;
   v_count := v_count + v_n;
@@ -855,6 +858,157 @@ end;
 $$;
 
 -- -----------------------------------------------------------------------------
+-- Inventaires
+-- Création (photo du stock théorique), comptage, validation (ajustements des
+-- écarts tracés comme mouvements de stock), annulation.
+-- -----------------------------------------------------------------------------
+
+-- Qui peut inventorier un site : administration et gestionnaire de stock partout,
+-- magasinier sur son site d'affectation
+create or replace function app.can_inventory(p_location text) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select coalesce(app.my_role() in ('super_admin', 'gestionnaire_stock')
+                  or (app.my_role() = 'magasinier' and p_location = app.my_location()), false)
+$$;
+
+create or replace function public.create_inventory(p jsonb)
+returns text language plpgsql security definer set search_path = '' as $$
+declare
+  v_location text := p ->> 'locationId';
+  v_scope text := coalesce(p ->> 'scope', 'stock');
+  v_category text := nullif(p ->> 'categoryId', '');
+  v_inv public.inventories;
+  v_count integer;
+begin
+  if not app.can_inventory(v_location) then
+    raise exception 'Accès refusé : vous ne pouvez pas inventorier ce site' using errcode = '42501';
+  end if;
+  if not exists (select 1 from public.shops where id = v_location) and not exists (select 1 from public.warehouses where id = v_location) then
+    raise exception 'Site introuvable' using errcode = 'P0002';
+  end if;
+  if coalesce(trim(p ->> 'label'), '') = '' then
+    raise exception 'Donnez un intitulé à l''inventaire' using errcode = 'P0001';
+  end if;
+  if v_scope = 'category' and v_category is null then
+    raise exception 'Choisissez la catégorie à inventorier' using errcode = 'P0001';
+  end if;
+  insert into public.inventories (number, location_id, date, label, scope, category_id, note, created_by)
+  values ('', v_location, coalesce((p ->> 'date')::date, (now() at time zone 'Africa/Douala')::date), trim(p ->> 'label'),
+          v_scope, v_category, nullif(trim(p ->> 'note'), ''), app.my_employee_id())
+  returning * into v_inv;
+
+  insert into public.inventory_lines (inventory_id, product_id, expected)
+  select v_inv.id, pr.id, coalesce(sl.quantity, 0)
+  from public.products pr
+  left join public.stock_levels sl on sl.product_id = pr.id and sl.location_id = v_location
+  where case v_scope
+    when 'stock' then sl.id is not null
+    when 'category' then pr.status = 'actif' and pr.category_id = v_category
+    when 'selection' then pr.id in (select jsonb_array_elements_text(coalesce(p -> 'productIds', '[]'::jsonb)))
+    else pr.status = 'actif'
+  end;
+  get diagnostics v_count = row_count;
+  if v_count = 0 then
+    raise exception 'Aucun produit à inventorier pour ce choix' using errcode = 'P0001';
+  end if;
+  perform app.log('Création', 'Inventaire', v_inv.number || ' — ' || v_inv.label || ' (' || v_count || ' produits)');
+  return v_inv.id;
+end;
+$$;
+
+-- Enregistre les quantités comptées (un produit absent de la fiche y est ajouté)
+create or replace function public.save_inventory_counts(p_id text, p_lines jsonb)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare
+  v_inv public.inventories;
+  v_line jsonb;
+  v_n integer := 0;
+  v_counted integer;
+begin
+  select * into v_inv from public.inventories where id = p_id for update;
+  if not found then raise exception 'Inventaire introuvable' using errcode = 'P0002'; end if;
+  if not app.can_inventory(v_inv.location_id) then
+    raise exception 'Accès refusé : vous ne pouvez pas inventorier ce site' using errcode = '42501';
+  end if;
+  if v_inv.status <> 'en_cours' then
+    raise exception 'Cet inventaire est clôturé : il ne peut plus être modifié' using errcode = 'P0001';
+  end if;
+  for v_line in select * from jsonb_array_elements(coalesce(p_lines, '[]'::jsonb)) loop
+    v_counted := case when v_line ? 'counted' and v_line ->> 'counted' is not null then (v_line ->> 'counted')::integer end;
+    if v_counted is not null and v_counted < 0 then
+      raise exception 'Une quantité comptée ne peut pas être négative' using errcode = 'P0001';
+    end if;
+    insert into public.inventory_lines (inventory_id, product_id, expected, counted, comment, counted_at)
+    values (v_inv.id, v_line ->> 'productId',
+            coalesce((select sl.quantity from public.stock_levels sl where sl.product_id = v_line ->> 'productId' and sl.location_id = v_inv.location_id), 0),
+            v_counted, nullif(trim(v_line ->> 'comment'), ''), case when v_counted is not null then now() at time zone 'Africa/Douala' end)
+    on conflict (inventory_id, product_id) do update
+      set counted = excluded.counted, comment = excluded.comment, counted_at = excluded.counted_at;
+    v_n := v_n + 1;
+  end loop;
+  return v_n;
+end;
+$$;
+
+-- Validation : le stock de chaque produit compté est aligné sur le comptage.
+-- L'écart est calculé avec le stock réel au moment de la validation (ventes
+-- et réceptions faites pendant le comptage comprises). Les lignes non comptées
+-- sont laissées telles quelles.
+create or replace function public.validate_inventory(p_id text)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare
+  v_inv public.inventories;
+  v_line record;
+  v_current integer;
+  v_n integer := 0;
+begin
+  select * into v_inv from public.inventories where id = p_id for update;
+  if not found then raise exception 'Inventaire introuvable' using errcode = 'P0002'; end if;
+  if not app.can_inventory(v_inv.location_id) then
+    raise exception 'Accès refusé : vous ne pouvez pas valider cet inventaire' using errcode = '42501';
+  end if;
+  if v_inv.status <> 'en_cours' then
+    raise exception 'Cet inventaire est déjà clôturé' using errcode = 'P0001';
+  end if;
+  if not exists (select 1 from public.inventory_lines where inventory_id = p_id and counted is not null) then
+    raise exception 'Aucune quantité comptée : saisissez le comptage avant de valider' using errcode = 'P0001';
+  end if;
+  for v_line in select * from public.inventory_lines where inventory_id = p_id and counted is not null loop
+    select coalesce((select sl.quantity from public.stock_levels sl where sl.product_id = v_line.product_id and sl.location_id = v_inv.location_id), 0)
+      into v_current;
+    if v_line.counted <> v_current then
+      insert into public.stock_movements (product_id, type, quantity, to_location_id, reason, reference, user_id)
+      values (v_line.product_id, 'ajustement', v_line.counted - v_current, v_inv.location_id,
+              'Inventaire ' || v_inv.number || ' — ' || v_inv.label, v_inv.number, app.my_employee_id());
+      v_n := v_n + 1;
+    end if;
+  end loop;
+  update public.inventories
+    set status = 'valide', validated_by = app.my_employee_id(), validated_at = now() at time zone 'Africa/Douala', adjustments = v_n
+    where id = p_id;
+  perform app.log('Validation', 'Inventaire', v_inv.number || ' — ' || v_n || ' ajustement(s)');
+  return v_n;
+end;
+$$;
+
+create or replace function public.cancel_inventory(p_id text)
+returns void language plpgsql security definer set search_path = '' as $$
+declare v_inv public.inventories;
+begin
+  select * into v_inv from public.inventories where id = p_id for update;
+  if not found then raise exception 'Inventaire introuvable' using errcode = 'P0002'; end if;
+  if not app.can_inventory(v_inv.location_id) then
+    raise exception 'Accès refusé : vous ne pouvez pas annuler cet inventaire' using errcode = '42501';
+  end if;
+  if v_inv.status <> 'en_cours' then
+    raise exception 'Seul un inventaire en cours peut être annulé' using errcode = 'P0001';
+  end if;
+  update public.inventories set status = 'annule' where id = p_id;
+  perform app.log('Annulation', 'Inventaire', v_inv.number);
+end;
+$$;
+
+-- -----------------------------------------------------------------------------
 -- Compteurs de la barre latérale (une requête légère au lieu de 7 tables).
 -- SECURITY INVOKER : les politiques RLS de l'appelant s'appliquent.
 -- -----------------------------------------------------------------------------
@@ -904,7 +1058,9 @@ grant execute on function app.my_employee_id(), app.my_role(), app.my_location()
 
 revoke all on function public.employee_directory(), public.create_sale(jsonb, boolean), public.cancel_sale(text),
   public.convert_quote_to_invoice(text), public.convert_prospect(text), public.complete_followup(text, text, date, text),
-  public.generate_followups(), public.generate_payslips(text), public.mark_notifications_read(text[]), public.nav_counters(), public.cash_expense(jsonb) from public, anon;
+  public.generate_followups(), public.generate_payslips(text), public.mark_notifications_read(text[]), public.nav_counters(), public.cash_expense(jsonb),
+  public.create_inventory(jsonb), public.save_inventory_counts(text, jsonb), public.validate_inventory(text), public.cancel_inventory(text) from public, anon;
 grant execute on function public.employee_directory(), public.create_sale(jsonb, boolean), public.cancel_sale(text),
   public.convert_quote_to_invoice(text), public.convert_prospect(text), public.complete_followup(text, text, date, text),
-  public.generate_followups(), public.generate_payslips(text), public.mark_notifications_read(text[]), public.nav_counters(), public.cash_expense(jsonb) to authenticated;
+  public.generate_followups(), public.generate_payslips(text), public.mark_notifications_read(text[]), public.nav_counters(), public.cash_expense(jsonb),
+  public.create_inventory(jsonb), public.save_inventory_counts(text, jsonb), public.validate_inventory(text), public.cancel_inventory(text) to authenticated;

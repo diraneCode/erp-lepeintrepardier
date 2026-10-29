@@ -6,6 +6,7 @@ import {
   LuBoxes,
   LuCalculator,
   LuCalendarDays,
+  LuClipboardCheck,
   LuClock,
   LuFileText,
   LuIdCard,
@@ -75,6 +76,7 @@ export const NAV: NavGroup[] = [
     items: [
       { title: "Produits", href: "/produits", icon: LuPackage, description: "Catalogue et catégories", keywords: "articles catalogue", module: "produits" },
       { title: "Stock", href: "/stock", icon: LuBoxes, description: "Niveaux et mouvements de stock", keywords: "inventaire", module: "stock" },
+      { title: "Inventaire", href: "/inventaire", icon: LuClipboardCheck, description: "Comptages, écarts et ajustements de stock", keywords: "inventaire comptage ecart ajustement", module: "inventaire" },
       { title: "Magasins", href: "/magasins", icon: LuWarehouse, description: "Entrepôts et dépôts", keywords: "entrepots", module: "magasins" },
       { title: "Boutiques", href: "/boutiques", icon: LuStore, description: "Points de vente", keywords: "points de vente", module: "boutiques" },
     ],

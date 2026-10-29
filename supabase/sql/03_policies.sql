@@ -22,7 +22,7 @@ begin
     'warehouses', 'shops', 'shop_targets', 'employees', 'categories', 'products', 'clients', 'prospects',
     'opportunities', 'quotes', 'sales', 'invoices', 'payments', 'followups', 'stock_levels', 'stock_movements',
     'campaigns', 'promotions', 'appointments', 'events', 'attendance', 'leaves', 'payslips', 'expenses',
-    'journal_entries', 'notifications', 'activity_logs', 'cash_movements'
+    'journal_entries', 'notifications', 'activity_logs', 'cash_movements', 'inventories', 'inventory_lines'
   ] loop
     execute format('alter table public.%I enable row level security', t);
   end loop;
@@ -86,13 +86,13 @@ create policy employees_write on public.employees for all to authenticated
   using ((select app.is_admin())) with check ((select app.is_admin()));
 
 -- -----------------------------------------------------------------------------
--- Clients : tous les clients pour ceux qui facturent ou établissent des proformas
--- (administration, caissière, commercial, gestionnaire de stock) ; pour les autres, leurs clients et ceux à qui ils ont vendu.
+-- Clients : tout employé actif voit tous les clients (chacun peut vendre,
+-- facturer ou établir une proforma) ; pour les autres, leurs clients et ceux à qui ils ont vendu.
 -- La modification reste réservée au responsable du client et à l'administration.
 -- -----------------------------------------------------------------------------
 create policy clients_select on public.clients for select to authenticated
   using (
-    (select app.my_role()) in ('super_admin', 'caissiere', 'commercial', 'gestionnaire_stock')
+    (select app.my_employee_id()) is not null
     or owner_id = (select app.my_employee_id())
     or exists (
       select 1 from public.sales s
@@ -120,28 +120,28 @@ create policy prospects_delete on public.prospects for delete to authenticated u
 create policy followups_select on public.followups for select to authenticated
   using ((select app.is_admin()) or owner_id = (select app.my_employee_id()));
 create policy followups_insert on public.followups for insert to authenticated
-  with check ((select app.my_role()) in ('super_admin', 'commercial', 'caissiere')
+  with check ((select app.my_employee_id()) is not null
               and ((select app.is_admin()) or owner_id = (select app.my_employee_id())));
 create policy followups_update on public.followups for update to authenticated
   using ((select app.is_admin()) or owner_id = (select app.my_employee_id()));
 create policy followups_delete on public.followups for delete to authenticated using ((select app.is_admin()));
 
--- Opportunités & proformas : commerciaux (les leurs) et administration
+-- Opportunités & proformas : chaque employé (les siennes) et l'administration
 create policy opportunities_select on public.opportunities for select to authenticated
   using ((select app.is_admin()) or owner_id = (select app.my_employee_id()));
 create policy opportunities_insert on public.opportunities for insert to authenticated
-  with check ((select app.is_admin()) or ((select app.my_role()) = 'commercial' and owner_id = (select app.my_employee_id())));
+  with check ((select app.is_admin()) or ((select app.my_employee_id()) is not null and owner_id = (select app.my_employee_id())));
 create policy opportunities_update on public.opportunities for update to authenticated
-  using ((select app.is_admin()) or ((select app.my_role()) = 'commercial' and owner_id = (select app.my_employee_id())));
+  using ((select app.is_admin()) or ((select app.my_employee_id()) is not null and owner_id = (select app.my_employee_id())));
 create policy opportunities_delete on public.opportunities for delete to authenticated using ((select app.is_admin()));
 
 create policy quotes_select on public.quotes for select to authenticated
   using ((select app.is_admin()) or owner_id = (select app.my_employee_id()));
--- Proformas : commerciaux et gestionnaire de stock (les leurs), administration
+-- Proformas : tout employé (les siennes), administration
 create policy quotes_insert on public.quotes for insert to authenticated
-  with check ((select app.is_admin()) or ((select app.my_role()) in ('commercial', 'gestionnaire_stock') and owner_id = (select app.my_employee_id())));
+  with check ((select app.is_admin()) or ((select app.my_employee_id()) is not null and owner_id = (select app.my_employee_id())));
 create policy quotes_update on public.quotes for update to authenticated
-  using ((select app.is_admin()) or ((select app.my_role()) in ('commercial', 'gestionnaire_stock') and owner_id = (select app.my_employee_id())));
+  using ((select app.is_admin()) or ((select app.my_employee_id()) is not null and owner_id = (select app.my_employee_id())));
 create policy quotes_delete on public.quotes for delete to authenticated using ((select app.is_admin()));
 
 -- -----------------------------------------------------------------------------
@@ -163,7 +163,7 @@ create policy invoices_select on public.invoices for select to authenticated
   using (
     (select app.is_admin())
     or ((select app.my_role()) = 'caissiere' and boutique_id = (select app.my_location()))
-    or ((select app.my_role()) = 'commercial' and (
+    or ((select app.my_employee_id()) is not null and (select app.my_role()) <> 'caissiere' and (
           exists (select 1 from public.clients c where c.id = invoices.client_id and c.owner_id = (select app.my_employee_id()))
        or exists (select 1 from public.sales s where s.id = invoices.sale_id and s.seller_id = (select app.my_employee_id()))
        or exists (select 1 from public.quotes q where q.id = invoices.quote_id and q.owner_id = (select app.my_employee_id()))))
@@ -189,11 +189,10 @@ create policy payments_delete on public.payments for delete to authenticated usi
 -- -----------------------------------------------------------------------------
 -- Stock (les niveaux ne se modifient que par des mouvements)
 -- -----------------------------------------------------------------------------
+-- Niveaux de stock lisibles par tout employé actif (disponibilité affichée à la vente) ;
+-- le module Stock n'affiche que le périmètre de chacun
 create policy stock_levels_select on public.stock_levels for select to authenticated
-  using (
-    (select app.my_role()) in ('super_admin', 'gestionnaire_stock', 'commercial')
-    or ((select app.my_employee_id()) is not null and location_id = (select app.my_location()))
-  );
+  using ((select app.my_employee_id()) is not null);
 create policy stock_levels_admin on public.stock_levels for all to authenticated
   using ((select app.is_admin())) with check ((select app.is_admin()));
 
@@ -305,3 +304,15 @@ create policy cash_insert on public.cash_movements for insert to authenticated
     kind in ('apport', 'autre_entree', 'versement_banque', 'autre_sortie')
     and ((select app.is_admin()) or ((select app.my_role()) = 'caissiere' and location_id = (select app.my_location())))
   );
+
+-- -----------------------------------------------------------------------------
+-- Inventaires : lecture selon le périmètre stock ; toutes les écritures passent
+-- par les fonctions create_inventory / save_inventory_counts / validate_inventory.
+-- -----------------------------------------------------------------------------
+create policy inventories_select on public.inventories for select to authenticated
+  using (
+    (select app.my_role()) in ('super_admin', 'gestionnaire_stock')
+    or ((select app.my_employee_id()) is not null and location_id = (select app.my_location()))
+  );
+create policy inventory_lines_select on public.inventory_lines for select to authenticated
+  using (exists (select 1 from public.inventories i where i.id = inventory_lines.inventory_id));

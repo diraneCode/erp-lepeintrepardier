@@ -45,8 +45,8 @@ const schema = z
   .refine((v) => v.validUntil >= v.date, { path: ["validUntil"], message: "Doit être postérieure à la date de la proforma" })
 type FormValues = z.infer<typeof schema>
 
-const defaults = (q?: Quote, ownerId = ""): FormValues => ({
-  clientId: q?.clientId ?? "",
+const defaults = (q?: Quote, ownerId = "", clientId = ""): FormValues => ({
+  clientId: q?.clientId ?? clientId,
   ownerId: q?.ownerId ?? ownerId,
   date: q?.date ?? format(new Date(), "yyyy-MM-dd"),
   validUntil: q?.validUntil ?? format(addDays(new Date(), 30), "yyyy-MM-dd"),
@@ -61,7 +61,18 @@ const defaults = (q?: Quote, ownerId = ""): FormValues => ({
   notes: q?.notes ?? "",
 })
 
-function QuoteFormDialogContent({ open, onOpenChange, quote }: { open: boolean; onOpenChange: (o: boolean) => void; quote?: Quote }) {
+function QuoteFormDialogContent({
+  open,
+  onOpenChange,
+  quote,
+  defaultClientId,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  quote?: Quote
+  /** Client présélectionné pour une nouvelle proforma (ex. depuis la fiche client) */
+  defaultClientId?: string
+}) {
   const add = useStore((s) => s.add)
   const update = useStore((s) => s.update)
   const { employeeOptions } = useLookups(["employeeOptions"])
@@ -71,8 +82,8 @@ function QuoteFormDialogContent({ open, onOpenChange, quote }: { open: boolean; 
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: defaults(quote) })
 
   React.useEffect(() => {
-    if (open) form.reset(defaults(quote, me?.id ?? ""))
-  }, [open, quote, form, acc.global, me])
+    if (open) form.reset(defaults(quote, me?.id ?? "", defaultClientId ?? ""))
+  }, [open, quote, form, acc.global, me, defaultClientId])
 
   const onSubmit = form.handleSubmit(async (values) => {
     const { applyTax, ...rest } = values

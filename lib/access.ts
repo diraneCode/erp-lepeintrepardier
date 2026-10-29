@@ -22,6 +22,7 @@ export type ModuleKey =
   | "marketing"
   | "produits"
   | "stock"
+  | "inventaire"
   | "magasins"
   | "boutiques"
   | "comptabilite"
@@ -57,6 +58,7 @@ const ALL_MODULES: ModuleKey[] = [
   "marketing",
   "produits",
   "stock",
+  "inventaire",
   "magasins",
   "boutiques",
   "comptabilite",
@@ -70,9 +72,16 @@ const ALL_MODULES: ModuleKey[] = [
 ]
 
 // Tout employé peut créer des prospects et des clients (rattachés à lui-même)
+// Gestion commerciale ouverte à tous : chacun sur ses propres données
+// (prospects, relances, clients, opportunités, proformas, ventes ; factures en lecture)
 const BASE: Partial<Record<ModuleKey, Permission>> = {
   clients: rw("own"),
   prospects: rw("own"),
+  relances: rw("own"),
+  opportunites: rw("own"),
+  devis: rw("own"),
+  ventes: rw("own"),
+  facturation: ro("own"),
   depenses: rw("own"),
 }
 
@@ -107,15 +116,16 @@ export const ACCESS: Record<Role, Partial<Record<ModuleKey, Permission>>> = {
   },
   gestionnaire_stock: {
     ...BASE,
-    devis: rw("own"),
     produits: rw("all"),
     stock: rw("all"),
+    inventaire: rw("all"),
     magasins: rw("all"),
   },
   magasinier: {
     ...BASE,
     produits: ro("all"),
     stock: rw("shop"),
+    inventaire: rw("shop"),
     magasins: ro("shop"),
   },
 }

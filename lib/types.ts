@@ -301,9 +301,47 @@ export interface StockMovement {
   quantity: number
   fromLocationId?: ID
   toLocationId?: ID
+  /** Motif saisi librement */
   reason: string
-  reference: string
+  /** Référence de la pièce (bon de réception, bon de livraison…), facultative */
+  reference?: string
   userId: ID
+}
+
+/* ---------- Inventaire ---------- */
+
+export type InventoryStatus = "en_cours" | "valide" | "annule"
+/** Produits inventoriés : tous les actifs, ceux en stock sur le site, une catégorie, une sélection */
+export type InventoryScope = "all" | "stock" | "category" | "selection"
+
+export interface Inventory {
+  id: ID
+  number: string
+  locationId: ID
+  date: string
+  label: string
+  scope: InventoryScope
+  categoryId?: ID
+  status: InventoryStatus
+  note?: string
+  createdBy?: ID
+  createdAt?: string
+  validatedBy?: ID
+  validatedAt?: string
+  /** Nombre d'ajustements de stock générés à la validation */
+  adjustments: number
+}
+
+export interface InventoryLine {
+  id: ID
+  inventoryId: ID
+  productId: ID
+  /** Stock théorique à l'ouverture de l'inventaire */
+  expected: number
+  /** Quantité comptée (absente tant que le produit n'est pas compté) */
+  counted?: number
+  comment?: string
+  countedAt?: string
 }
 
 /* ---------- Marketing ---------- */

@@ -11,7 +11,7 @@ import { queryClient } from "@/lib/query-client"
 import { getSupabase } from "@/lib/supabase/client"
 import { isSupabaseConfigured } from "@/lib/supabase/env"
 import { fromDb, toDb } from "@/lib/supabase/mapping"
-import type { AppNotification, Employee, Followup, Invoice, Leave, Expense, Payment, Sale, StockMovement } from "@/lib/types"
+import type { AppNotification, Employee, Inventory, Followup, Invoice, Leave, Expense, Payment, Sale, StockMovement } from "@/lib/types"
 
 /* ---------- Types ---------- */
 
@@ -54,6 +54,13 @@ interface Actions {
   setExpenseStatus: (ids: string[], status: Expense["status"]) => Promise<boolean>
   /** Renvoie le nombre de bulletins créés (-1 si échec) */
   generatePayslips: (period: string) => Promise<number>
+  /** Ouvre un inventaire (photo du stock théorique) ; renvoie son identifiant (null si échec) */
+  createInventory: (input: { locationId: string; label: string; scope: Inventory["scope"]; categoryId?: string; productIds?: string[]; date?: string; note?: string }) => Promise<string | null>
+  /** Enregistre les quantités comptées */
+  saveInventoryCounts: (inventoryId: string, lines: { productId: string; counted: number | null; comment?: string }[]) => Promise<boolean>
+  /** Valide l'inventaire : ajuste le stock ; renvoie le nombre d'ajustements (-1 si échec) */
+  validateInventory: (inventoryId: string) => Promise<number>
+  cancelInventory: (inventoryId: string) => Promise<boolean>
   /** Dépense payée en espèces depuis la caisse d'un site ; renvoie son numéro (null si échec) */
   recordCashExpense: (input: CashExpenseInput) => Promise<string | null>
 }
@@ -129,6 +136,8 @@ const TABLES: Record<CollectionKey, string> = {
   notifications: "notifications",
   activity: "activity_logs",
   cashMovements: "cash_movements",
+  inventories: "inventories",
+  inventoryLines: "inventory_lines",
 }
 
 /** Tri par défaut (les plus récents d'abord) pour un affichage cohérent. */
@@ -145,6 +154,7 @@ const ORDER: Partial<Record<CollectionKey, string>> = {
   notifications: "date",
   activity: "date",
   cashMovements: "date",
+  inventories: "date",
   clients: "created_at",
   prospects: "created_at",
   followups: "due_date",
@@ -160,6 +170,7 @@ const DEPENDENTS: Partial<Record<CollectionKey, CollectionKey[]>> = {
   stockMovements: ["stockLevels"],
   expenses: ["journalEntries", "cashMovements"],
   cashMovements: ["journalEntries"],
+  inventories: ["inventoryLines", "stockLevels", "stockMovements"],
   sales: ["journalEntries", "cashMovements"],
   products: ["stockLevels"],
   warehouses: ["stockLevels"],
@@ -516,7 +527,7 @@ const rawActions: Actions = {
 
   createStockMovement: async (movement) => {
     const ok = await rawActions.add("stockMovements", { ...movement, userId: me()?.id ?? movement.userId })
-    if (ok) rawActions.log("Mouvement", "Stock", `${movement.reference} (${movement.type})`)
+    if (ok) rawActions.log("Mouvement", "Stock", `${movement.reason}${movement.reference ? ` · ${movement.reference}` : ""} (${movement.type})`)
     return ok
   },
 
@@ -531,7 +542,7 @@ const rawActions: Actions = {
     refresh("stockMovements")
     if (error) return fail(error)
     const first = movements[0]
-    rawActions.log("Mouvement", "Stock", `${first.reference} (${first.type}, ${movements.length} produit(s))`)
+    rawActions.log("Mouvement", "Stock", `${first.reason}${first.reference ? ` · ${first.reference}` : ""} (${first.type}, ${movements.length} produit(s))`)
     return true
   },
 
@@ -549,6 +560,46 @@ const rawActions: Actions = {
     if (error) return fail(error)
     rawActions.log("Statut", "Dépenses", `${ids.length} dépense(s) → ${status}`)
     return true
+  },
+
+  createInventory: async (input) => {
+    const { data, error } = await getSupabase().rpc("create_inventory", { p: input })
+    refresh("inventories")
+    if (error) {
+      fail(error)
+      return null
+    }
+    return (data as string | null) ?? null
+  },
+
+  saveInventoryCounts: async (inventoryId, lines) => {
+    // Mise à jour immédiate de l'affichage, confirmée par la base
+    const byProduct = new Map(lines.map((l) => [l.productId, l]))
+    setCached("inventoryLines", (rows) =>
+      rows.map((r) => {
+        const l = r.inventoryId === inventoryId ? byProduct.get(r.productId) : undefined
+        return l ? { ...r, counted: l.counted ?? undefined, comment: l.comment || undefined } : r
+      })
+    )
+    const { error } = await getSupabase().rpc("save_inventory_counts", { p_id: inventoryId, p_lines: lines })
+    refresh("inventoryLines")
+    return error ? fail(error) : true
+  },
+
+  validateInventory: async (inventoryId) => {
+    const { data, error } = await getSupabase().rpc("validate_inventory", { p_id: inventoryId })
+    refresh("inventories")
+    if (error) {
+      fail(error)
+      return -1
+    }
+    return Number(data ?? 0)
+  },
+
+  cancelInventory: async (inventoryId) => {
+    const { error } = await getSupabase().rpc("cancel_inventory", { p_id: inventoryId })
+    refresh("inventories")
+    return error ? fail(error) : true
   },
 
   recordCashExpense: async (input) => {
@@ -578,6 +629,8 @@ const FALLBACK: Partial<Record<keyof Actions, unknown>> = {
   changePassword: "Modification impossible pour le moment. Réessayez.",
   convertProspect: null,
   recordCashExpense: null,
+  createInventory: null,
+  validateInventory: -1,
   convertQuoteToInvoice: null,
   generateFollowups: -1,
   generatePayslips: -1,

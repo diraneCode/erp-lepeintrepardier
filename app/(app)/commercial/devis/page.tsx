@@ -109,8 +109,10 @@ export default function QuotesPage() {
     }
   }, [data])
 
-  const openEdit = (q?: Quote) => {
+  const [presetClient, setPresetClient] = useTransientState<string | undefined>(undefined)
+  const openEdit = (q?: Quote, clientId?: string) => {
     setEditing(q)
+    setPresetClient(clientId)
     setFormOpen(true)
   }
 
@@ -165,7 +167,7 @@ export default function QuotesPage() {
 
   return (
     <Page>
-      <UrlActions onNew={() => acc.write && openEdit()} onQuery={filters.setSearch} />
+      <UrlActions onNew={(p) => acc.write && openEdit(undefined, p.get("client") ?? undefined)} onQuery={filters.setSearch} />
       <PageHeader
         icon={LuFileText}
         title="Devis & proformas"
@@ -243,7 +245,7 @@ export default function QuotesPage() {
         </CardContent>
       </Card>
 
-      <QuoteFormDialog open={formOpen} onOpenChange={setFormOpen} quote={editing} />
+      <QuoteFormDialog open={formOpen} onOpenChange={setFormOpen} quote={editing} defaultClientId={presetClient} />
       <FollowupFormDialog open={!!followPreset} onOpenChange={(o) => !o && setFollowPreset(null)} preset={followPreset ?? undefined} />
 
       <DetailSheet

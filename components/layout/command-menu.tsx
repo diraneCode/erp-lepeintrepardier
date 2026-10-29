@@ -48,6 +48,7 @@ export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChang
   const nav = visibleNav(can)
   const quick = [
     { href: "/ventes?nouveau=1", label: "Nouvelle vente", module: "ventes" as const },
+    { href: "/commercial/devis?nouveau=1", label: "Nouvelle proforma", module: "devis" as const },
     { href: "/facturation?nouveau=1", label: "Nouvelle facture", module: "facturation" as const },
     { href: "/commercial/clients?nouveau=1", label: "Nouveau client", module: "clients" as const },
     { href: "/depenses?nouveau=1", label: "Nouvelle dépense", module: "depenses" as const },

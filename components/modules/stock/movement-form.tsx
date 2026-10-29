@@ -19,6 +19,7 @@ import { movementType, toOptions } from "@/lib/labels"
 import { uid, useStore } from "@/lib/store"
 import type { StockMovementType } from "@/lib/types"
 
+/** Motifs suggérés à la saisie (le motif reste libre) */
 export const MOVEMENT_REASONS: Record<StockMovementType, string[]> = {
   entree: ["Réception fournisseur", "Approvisionnement boutique", "Retour client", "Production atelier teinte"],
   sortie: ["Livraison chantier", "Casse / produit endommagé", "Échantillons", "Consommation interne"],
@@ -37,8 +38,8 @@ const schema = z
     lines: z.array(lineSchema).min(1, "Ajoutez au moins un produit"),
     fromLocationId: z.string(),
     toLocationId: z.string(),
-    reason: z.string().min(1, "Motif requis"),
-    reference: z.string().trim().min(2, "Référence requise"),
+    reason: z.string().trim().min(2, "Motif requis").max(200, "200 caractères maximum"),
+    reference: z.string().trim().max(60, "60 caractères maximum"),
   })
   .superRefine((v, ctx) => {
     if (v.type !== "ajustement") {
@@ -83,7 +84,7 @@ function MovementFormDialogContent({ open, onOpenChange, preset }: { open: boole
       lines: ids.map((productId) => ({ productId, quantity: Number.NaN })),
       fromLocationId: type === "sortie" || type === "transfert" ? preset?.locationId ?? "" : "",
       toLocationId: type === "entree" || type === "ajustement" ? preset?.locationId ?? "" : "",
-      reason: MOVEMENT_REASONS[type][0],
+      reason: "",
       reference: "",
     })
   }, [open, preset, form])
@@ -91,10 +92,6 @@ function MovementFormDialogContent({ open, onOpenChange, preset }: { open: boole
   const [type, from, lines] = useWatch({ control: form.control, name: ["type", "fromLocationId", "lines"] })
   const outgoing = type === "sortie" || type === "transfert"
   const availableAt = (productId: string) => (from ? stockLevels.find((l) => l.productId === productId && l.locationId === from)?.quantity ?? 0 : null)
-
-  React.useEffect(() => {
-    if (type && form.formState.dirtyFields.type) form.setValue("reason", MOVEMENT_REASONS[type][0])
-  }, [type, form])
 
   // Le sélecteur ne propose que les produits pas encore ajoutés
   const selected = new Set((lines ?? []).map((l) => l.productId))
@@ -135,13 +132,13 @@ function MovementFormDialogContent({ open, onOpenChange, preset }: { open: boole
         fromLocationId: outgoing ? v.fromLocationId : undefined,
         toLocationId: v.type !== "sortie" ? v.toLocationId : undefined,
         reason: v.reason,
-        reference: v.reference,
+        reference: v.reference || undefined,
         userId: currentUserId ?? "",
       }))
     )
     if (!ok) return
     toast.success(v.lines.length > 1 ? `${v.lines.length} mouvements enregistrés` : "Mouvement enregistré", {
-      description: `${movementType[v.type].label} · ${v.reason} · ${v.reference}`,
+      description: [movementType[v.type].label, v.reason, v.reference].filter(Boolean).join(" · "),
     })
     onOpenChange(false)
   })
@@ -161,7 +158,19 @@ function MovementFormDialogContent({ open, onOpenChange, preset }: { open: boole
       <div className="flex flex-col gap-6">
         <FormGrid>
           <SelectField control={form.control} name="type" label="Type de mouvement" required options={toOptions(movementType)} />
-          <SelectField control={form.control} name="reason" label="Motif" required options={(MOVEMENT_REASONS[type ?? "entree"] ?? []).map((r) => ({ value: r, label: r }))} />
+          <TextField
+            control={form.control}
+            name="reason"
+            label="Motif"
+            required
+            list="movement-reasons"
+            placeholder={`Ex : ${(MOVEMENT_REASONS[type ?? "entree"] ?? [])[0] ?? "Motif du mouvement"}`}
+          />
+          <datalist id="movement-reasons">
+            {(MOVEMENT_REASONS[type ?? "entree"] ?? []).map((r) => (
+              <option key={r} value={r} />
+            ))}
+          </datalist>
           {outgoing && <SelectField control={form.control} name="fromLocationId" label="Site d'origine" required options={locationOptions} />}
           {type !== "sortie" && (
             <SelectField
@@ -172,7 +181,7 @@ function MovementFormDialogContent({ open, onOpenChange, preset }: { open: boole
               options={type === "transfert" ? allLocations : locationOptions}
             />
           )}
-          <TextField control={form.control} name="reference" label="Référence" required placeholder="BR-00123, BL fournisseur…" className={type === "entree" || type === "ajustement" ? undefined : "sm:col-span-2"} />
+          <TextField control={form.control} name="reference" label="Référence" placeholder="Facultatif : BR-00123, BL fournisseur…" className={type === "entree" || type === "ajustement" ? undefined : "sm:col-span-2"} />
         </FormGrid>
 
         <FormSection title={`Produits (${fields.length})`}>

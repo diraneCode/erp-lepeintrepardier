@@ -242,7 +242,7 @@ export default function ClientsPage() {
                   { label: "Voir la fiche", icon: LuEye, onSelect: () => setViewing(r) },
                   { label: "Modifier", icon: LuPencil, onSelect: () => openEdit(r), hidden: !canEdit(r) },
                   { label: "Programmer une relance", icon: LuBellRing, onSelect: () => setFollowPreset({ targetType: "client", targetId: r.id, subject: `Suivi client ${r.name}` }), hidden: !canFollowup },
-                  { label: "Créer un devis", icon: LuFileText, onSelect: () => router.push("/commercial/devis?nouveau=1"), hidden: !canQuote },
+                  { label: "Créer une proforma", icon: LuFileText, onSelect: () => router.push(`/commercial/devis?nouveau=1&client=${encodeURIComponent(r.id)}`), hidden: !canQuote },
                   { label: "Supprimer", icon: LuTrash2, destructive: true, separatorBefore: true, onSelect: () => setToDelete([r.id]), hidden: !acc.global || !acc.write },
                 ]}
               />

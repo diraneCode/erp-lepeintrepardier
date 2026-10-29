@@ -9,6 +9,8 @@ ERP Le Peintre Pardier — Next.js 16, React 19, Supabase (Postgres, Auth, Stora
 1. Créez un projet sur [supabase.com](https://supabase.com).
 2. Dans **SQL Editor**, exécutez dans l'ordre les scripts de `supabase/sql/` :
    `01_schema.sql` → `02_functions.sql` → `03_policies.sql` → `04_storage.sql` → `05_indexes.sql`
+   (puis, si besoin, `06_produits_showroom.sql` pour le catalogue du showroom). `pnpm test:sql` rejoue
+   ces scripts et les scénarios de sécurité dans un Postgres embarqué (PGlite)
    (ils peuvent être réexécutés sans perte de données).
 3. **Authentication → Sign In / Providers** : désactivez *Allow new users to sign up*
    (les comptes sont créés par l'administrateur depuis RH → Employés) et gardez *Email* activé.
@@ -61,9 +63,10 @@ Le super administrateur peut le réinitialiser (*Mon compte → Administration*)
 droit d'écriture. `hooks/use-access.ts` fournit l'utilisateur connecté et les données filtrées
 (`useScopedData`). Les filtres par personne (commercial, vendeur, responsable…) ne sont proposés
 qu'aux profils à portée globale. Postes (= rôles) : caissière, gestionnaire de stock, commercial(e),
-magasinier, plus le super administrateur. Tout employé peut créer prospects et clients ; ceux qui facturent
-(caissière, commercial·e, administration) voient et peuvent choisir tous les clients, mais seul le responsable
-d'un client (ou l'administration) modifie sa fiche.
+magasinier, plus le super administrateur. La gestion commerciale (prospects, relances, clients, opportunités,
+proformas, ventes, factures en lecture) est ouverte à tous, chacun sur ses propres données ; tout employé voit
+et peut choisir tous les clients, mais seul le responsable d'un client (ou l'administration) modifie sa fiche.
+Inventaire : administration et gestionnaire de stock sur tous les sites, magasinier sur son site.
 Le filtrage côté interface est doublé par la sécurité de la base : chaque table est protégée par des
 politiques RLS qui appliquent la même matrice (`supabase/sql/03_policies.sql`). Les pièces des employés
 (photo, CNI, CV, plan, diplôme) sont dans le bucket privé `employee-files`, servies par URL signée.

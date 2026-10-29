@@ -270,7 +270,7 @@ function MovementsTab({ global }: { global: boolean }) {
 
   const columns: Column<StockMovement>[] = [
     { id: "date", header: "Date", accessor: (m) => m.date, cell: (m) => <span className="whitespace-nowrap">{formatDateTime(m.date)}</span>, exportValue: (m) => formatDateTime(m.date) },
-    { id: "reference", header: "Référence", accessor: (m) => m.reference, cell: (m) => <span className="font-medium">{m.reference}</span> },
+    { id: "reference", header: "Référence", accessor: (m) => m.reference ?? "", cell: (m) => (m.reference ? <span className="font-medium">{m.reference}</span> : <span className="text-muted-foreground">—</span>) },
     { id: "type", header: "Type", accessor: (m) => movementType[m.type].label, cell: (m) => <StatusBadge def={movementType[m.type]} /> },
     { id: "product", header: "Produit", accessor: (m) => productName(m.productId), className: "max-w-[240px] truncate" },
     {
