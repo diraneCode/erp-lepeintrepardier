@@ -124,7 +124,7 @@ function ProductFormDialogContent({ open, onOpenChange, product }: { open: boole
           <FormGrid cols={3}>
             <NumberField control={form.control} name="purchasePrice" label="Prix d'achat" required suffix="FCFA" min={0} step={100} />
             <NumberField control={form.control} name="salePrice" label="Prix de vente" required suffix="FCFA" min={0} step={100} />
-            <NumberField control={form.control} name="minStock" label="Seuil d'alerte" required min={0} description="Quantité minimale par site" />
+            <NumberField control={form.control} name="minStock" label="Seuil d'alerte par défaut" required min={0} description="Appliqué aux sites sans seuil propre" />
             <SelectField control={form.control} name="status" label="Statut" required options={[{ value: "actif", label: "Actif" }, { value: "inactif", label: "Inactif" }]} />
             <div className="flex flex-col justify-center rounded-lg bg-muted/60 px-3 py-2 text-sm">
               <span className="text-xs text-muted-foreground">Marge unitaire</span>

@@ -40,6 +40,7 @@ import { daysOverdue, documentTotals, invoiceBalance, invoiceStatus as computeIn
 import { DATE_PRESETS, describeRange, inRange, previousRange, type DateRange } from "@/lib/date-range"
 import { formatDate, formatMoney, formatNumber, formatPercent, toISODate } from "@/lib/format"
 import { leaveType, saleStatus } from "@/lib/labels"
+import { alertThreshold } from "@/lib/products"
 import { useStore } from "@/lib/store"
 
 // Références stables (évitent de recalculer les indicateurs à chaque rendu)
@@ -87,7 +88,6 @@ function Dashboard() {
     const collectedPrev = prev ? payments.filter((p) => inRange(p.date, prev)).reduce((a, p) => a + p.amount, 0) : 0
     const overdue = invoices.filter((i) => computeInvoiceStatus(i) === "en_retard")
     const newClients = clients.filter((c) => inRange(c.createdAt, range)).length
-    const minOf = new Map([...productById].map(([id, p]) => [id, p.minStock]))
     return {
       cur,
       revenue,
@@ -103,7 +103,7 @@ function Dashboard() {
       overdue,
       overdueAmount: overdue.reduce((a, i) => a + invoiceBalance(i), 0),
       newClients,
-      stockAlerts: levels.filter((l) => l.quantity <= (minOf.get(l.productId) ?? 0)).length,
+      stockAlerts: levels.filter((l) => l.quantity <= alertThreshold(l, productById.get(l.productId))).length,
       pendingLeaves: leaves.filter((l) => l.status === "en_attente"),
       pipeline: opportunities.filter((o) => o.stage !== "gagnee" && o.stage !== "perdue").reduce((a, o) => a + (o.amount * o.probability) / 100, 0),
     }

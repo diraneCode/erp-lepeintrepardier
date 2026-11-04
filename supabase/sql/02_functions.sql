@@ -998,6 +998,52 @@ end;
 $$;
 
 -- -----------------------------------------------------------------------------
+-- Fiche produit : stock et seuil d'alerte renseignés site par site.
+-- p_levels : [{ locationId, quantity, minStock }] (minStock vide : seuil du produit).
+-- Chaque écart de quantité est tracé par un mouvement « ajustement ».
+-- -----------------------------------------------------------------------------
+create or replace function public.set_product_stock(p_product text, p_levels jsonb)
+returns integer language plpgsql security definer set search_path = '' as $$
+declare
+  v_level jsonb;
+  v_location text;
+  v_quantity integer;
+  v_min integer;
+  v_current integer;
+  v_count integer := 0;
+begin
+  if not exists (select 1 from public.products where id = p_product) then
+    raise exception 'Produit introuvable' using errcode = 'P0001';
+  end if;
+  for v_level in select * from jsonb_array_elements(coalesce(p_levels, '[]'::jsonb)) loop
+    v_location := v_level ->> 'locationId';
+    v_quantity := (v_level ->> 'quantity')::integer;
+    v_min := nullif(v_level ->> 'minStock', '')::integer;
+    if not app.can_inventory(v_location) then
+      raise exception 'Accès refusé : vous ne pouvez pas modifier le stock de ce site' using errcode = '42501';
+    end if;
+    if not exists (select 1 from public.shops where id = v_location) and not exists (select 1 from public.warehouses where id = v_location) then
+      raise exception 'Site introuvable' using errcode = 'P0001';
+    end if;
+    if v_quantity is null or v_quantity < 0 or v_min < 0 then
+      raise exception 'Quantité et seuil doivent être positifs' using errcode = 'P0001';
+    end if;
+    select quantity into v_current from public.stock_levels where product_id = p_product and location_id = v_location;
+    if v_quantity <> coalesce(v_current, 0) then
+      insert into public.stock_movements (product_id, type, quantity, to_location_id, reason)
+      values (p_product, 'ajustement', v_quantity - coalesce(v_current, 0), v_location, 'Mise à jour depuis la fiche produit');
+      v_count := v_count + 1;
+    end if;
+    -- Valeur saisie appliquée telle quelle (le mouvement ci-dessus l'a déjà répercutée)
+    insert into public.stock_levels (product_id, location_id, quantity, min_stock)
+    values (p_product, v_location, v_quantity, v_min)
+    on conflict (product_id, location_id) do update set quantity = excluded.quantity, min_stock = excluded.min_stock;
+  end loop;
+  return v_count;
+end;
+$$;
+
+-- -----------------------------------------------------------------------------
 -- Compteurs de la barre latérale (une requête légère au lieu de 7 tables).
 -- SECURITY INVOKER : les politiques RLS de l'appelant s'appliquent.
 -- -----------------------------------------------------------------------------
@@ -1009,7 +1055,7 @@ returns jsonb language sql stable security invoker set search_path = '' as $$
     'invoices', (select count(*) from public.invoices, today
                  where status in ('emise', 'partielle') and due_date < today.d),
     'stock', (select count(*) from public.stock_levels l join public.products p on p.id = l.product_id
-              where l.quantity <= p.min_stock),
+              where l.quantity <= coalesce(l.min_stock, p.min_stock)),
     'expenses', (select count(*) from public.expenses where status = 'en_attente'),
     'followups', (select count(*) from public.followups, today
                   where status in ('a_faire', 'reporte') and due_date <= today.d)
@@ -1048,8 +1094,10 @@ grant execute on function app.my_employee_id(), app.my_role(), app.my_location()
 revoke all on function public.employee_directory(), public.create_sale(jsonb, boolean), public.cancel_sale(text),
   public.convert_quote_to_invoice(text), public.convert_prospect(text), public.complete_followup(text, text, date, text),
   public.generate_followups(), public.generate_payslips(text), public.mark_notifications_read(text[]), public.nav_counters(), public.cash_expense(jsonb),
-  public.create_inventory(jsonb), public.save_inventory_counts(text, jsonb), public.validate_inventory(text), public.cancel_inventory(text) from public, anon;
+  public.create_inventory(jsonb), public.save_inventory_counts(text, jsonb), public.validate_inventory(text), public.cancel_inventory(text),
+  public.set_product_stock(text, jsonb) from public, anon;
 grant execute on function public.employee_directory(), public.create_sale(jsonb, boolean), public.cancel_sale(text),
   public.convert_quote_to_invoice(text), public.convert_prospect(text), public.complete_followup(text, text, date, text),
   public.generate_followups(), public.generate_payslips(text), public.mark_notifications_read(text[]), public.nav_counters(), public.cash_expense(jsonb),
-  public.create_inventory(jsonb), public.save_inventory_counts(text, jsonb), public.validate_inventory(text), public.cancel_inventory(text) to authenticated;
+  public.create_inventory(jsonb), public.save_inventory_counts(text, jsonb), public.validate_inventory(text), public.cancel_inventory(text),
+  public.set_product_stock(text, jsonb) to authenticated;

@@ -134,6 +134,22 @@ await as("gest", async () => {
   check("stock : motif obligatoire", !!(await fails(`insert into public.stock_movements (product_id, type, quantity, to_location_id, reason) values ('p3', 'entree', 1, 'w1', '  ')`)))
 })
 
+// ------------------------------------------------------------------ Fiche produit : stock et seuil par site
+await as("gest", async () => {
+  const [{ n }] = await q(`select public.set_product_stock('p3', $1::jsonb) as n`, [JSON.stringify([{ locationId: "s1", quantity: 12, minStock: 4 }, { locationId: "w1", quantity: 5, minStock: null }])])
+  const lv = Object.fromEntries((await q(`select location_id, quantity, min_stock from public.stock_levels where product_id = 'p3'`)).map((r) => [r.location_id, r]))
+  check("fiche produit : stock fixé par site (sans doublon)", lv.s1.quantity === 12 && lv.w1.quantity === 5 && lv.w2.quantity === 25, JSON.stringify(lv))
+  check("fiche produit : seuil propre au site, vide = seuil du produit", lv.s1.min_stock === 4 && lv.w1.min_stock === null, JSON.stringify(lv))
+  const adj = await q(`select to_location_id location_id, quantity from public.stock_movements where product_id = 'p3' and reason = 'Mise à jour depuis la fiche produit'`)
+  check("fiche produit : seuls les écarts sont tracés", n === 1 && adj.length === 1 && adj[0].location_id === "s1" && adj[0].quantity === 12, JSON.stringify(adj))
+})
+await as("mag", async () => {
+  check("fiche produit : magasinier limité à son site", !!(await fails(`select public.set_product_stock('p3', $1::jsonb)`, [JSON.stringify([{ locationId: "s1", quantity: 1 }])])))
+})
+await as("com", async () => {
+  check("fiche produit : commercial non autorisé", !!(await fails(`select public.set_product_stock('p3', $1::jsonb)`, [JSON.stringify([{ locationId: "w1", quantity: 1 }])])))
+})
+
 // ------------------------------------------------------------------ Inventaire
 await as("mag", async () => {
   const [{ id }] = await q(`select public.create_inventory($1::jsonb) as id`, [JSON.stringify({ locationId: "w2", label: "Inventaire mensuel", scope: "stock" })])

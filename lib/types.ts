@@ -286,6 +286,8 @@ export interface StockLevel {
   /** Identifiant d'un entrepôt ou d'une boutique */
   locationId: ID
   quantity: number
+  /** Seuil d'alerte propre au site (absent : seuil par défaut du produit) */
+  minStock?: number
 }
 
 export type StockMovementType = "entree" | "sortie" | "transfert" | "ajustement"

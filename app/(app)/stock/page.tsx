@@ -33,6 +33,7 @@ import { useTransientState } from "@/hooks/use-transient-state"
 import { formatDateTime, formatMoney, formatNumber } from "@/lib/format"
 import { movementType, toOptions } from "@/lib/labels"
 import type { StockLevel, StockMovement } from "@/lib/types"
+import { alertThreshold } from "@/lib/products"
 import { cn } from "@/lib/utils"
 
 type LevelState = "rupture" | "bas" | "ok" | "surstock"
@@ -96,7 +97,7 @@ function LevelsTab({ onMovement, global }: { onMovement?: (p: MovementPreset) =>
           const p = productById.get(l.productId)
           const loc = locationById.get(l.locationId)
           if (!p || !loc) return null
-          const min = p.minStock
+          const min = alertThreshold(l, p)
           const state: LevelState = l.quantity === 0 ? "rupture" : l.quantity <= min ? "bas" : l.quantity > min * (loc.kind === "entrepot" ? 8 : 4) ? "surstock" : "ok"
           return { ...l, productName: p.name, sku: p.sku, categoryId: p.categoryId, kind: loc.kind, min, value: l.quantity * p.purchasePrice, state }
         })

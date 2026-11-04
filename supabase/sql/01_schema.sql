@@ -276,8 +276,11 @@ create table if not exists public.stock_levels (
   product_id text not null references public.products (id) on delete cascade,
   location_id text not null,
   quantity integer not null default 0 check (quantity >= 0),
+  -- Seuil d'alerte propre au site (vide : seuil par défaut du produit)
+  min_stock integer check (min_stock >= 0),
   unique (product_id, location_id)
 );
+alter table public.stock_levels add column if not exists min_stock integer check (min_stock >= 0);
 create index if not exists stock_levels_location_idx on public.stock_levels (location_id);
 
 create table if not exists public.stock_movements (

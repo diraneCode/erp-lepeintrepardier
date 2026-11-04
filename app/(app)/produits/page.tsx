@@ -18,19 +18,22 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { UrlActions } from "@/components/shared/url-actions"
 import { CategoryFormDialog, ProductFormDialog } from "@/components/modules/products/forms"
 import { MovementFormDialog, type MovementPreset } from "@/components/modules/stock/movement-form"
+import { ProductStockDialog } from "@/components/modules/stock/product-stock-form"
 import { useFilters, type FilterConfig } from "@/hooks/use-filters"
 import { useLookups } from "@/hooks/use-lookups"
 import { useAccess, useModuleAccess, useScopedData } from "@/hooks/use-access"
 import { useTransientState } from "@/hooks/use-transient-state"
 import { formatDate, formatMoney, formatNumber, formatPercent } from "@/lib/format"
 import { productUnit, toOptions } from "@/lib/labels"
-import { daysToExpiry, expiryDef, expiryState, hasActivePromo, type ExpiryState } from "@/lib/products"
+import { alertThreshold, daysToExpiry, expiryDef, expiryState, hasActivePromo, type ExpiryState } from "@/lib/products"
 import { useStore } from "@/lib/store"
-import type { Category, Product } from "@/lib/types"
+import type { Category, Product, StockLevel } from "@/lib/types"
 
 type StockState = "rupture" | "bas" | "ok"
 type Row = Product & {
   stock: number
+  /** Niveau de stock par site (identifiant du site → niveau) */
+  bySite: Map<string, StockLevel>
   margin: number
   marginRate: number
   stockValue: number
@@ -107,17 +110,34 @@ function CatalogTab({ onEdit, onNew, onStock }: { onEdit?: (p: Product) => void;
   const update = useStore((s) => s.update)
   const updateMany = useStore((s) => s.updateMany)
   const remove = useStore((s) => s.remove)
-  const { categoryName, categoryOptions, locationName, categoryById } = useLookups(["categoryName", "categoryOptions", "locationName", "categoryById"])
+  const { categoryName, categoryOptions, categoryById, locations } = useLookups(["categoryName", "categoryOptions", "categoryById", "locations"])
+  const { user, access } = useAccess()
   const [viewing, setViewing] = useTransientState<Row | null>(null)
+  const [editingStock, setEditingStock] = useTransientState<Row | null>(null)
+
+  // Une colonne par site : tous les sites si l'utilisateur voit tout le stock, sinon le sien
+  const stockAcc = access("stock")
+  const allSites = !!stockAcc?.global
+  const canEditStock = !!stockAcc?.write
+  const sites = React.useMemo(
+    () => (allSites ? locations : locations.filter((l) => l.id === user?.locationId || stockLevels.some((x) => x.locationId === l.id))),
+    [allSites, locations, user?.locationId, stockLevels]
+  )
+  const editableSites = React.useMemo(
+    () => (!canEditStock ? [] : allSites ? locations : locations.filter((l) => l.id === user?.locationId)),
+    [canEditStock, allSites, locations, user?.locationId]
+  )
   const [toDelete, setToDelete] = useTransientState<string[] | null>(null)
 
   const rows = React.useMemo<Row[]>(() => {
     const stock = new Map<string, number>()
+    const bySite = new Map<string, Map<string, StockLevel>>()
     const below = new Map<string, boolean>()
-    const minOf = new Map(products.map((p) => [p.id, p.minStock]))
+    const productById = new Map(products.map((p) => [p.id, p]))
     stockLevels.forEach((l) => {
       stock.set(l.productId, (stock.get(l.productId) ?? 0) + l.quantity)
-      if (l.quantity <= (minOf.get(l.productId) ?? 0)) below.set(l.productId, true)
+      bySite.set(l.productId, (bySite.get(l.productId) ?? new Map()).set(l.locationId, l))
+      if (l.quantity <= alertThreshold(l, productById.get(l.productId))) below.set(l.productId, true)
     })
     const sold = new Map<string, number>()
     sales.forEach((s) => s.status !== "annulee" && s.items.forEach((i) => i.productId && sold.set(i.productId, (sold.get(i.productId) ?? 0) + i.quantity)))
@@ -127,6 +147,7 @@ function CatalogTab({ onEdit, onNew, onStock }: { onEdit?: (p: Product) => void;
       return {
         ...p,
         stock: qty,
+        bySite: bySite.get(p.id) ?? new Map(),
         margin,
         marginRate: p.salePrice ? (margin / p.salePrice) * 100 : 0,
         stockValue: qty * p.purchasePrice,
@@ -214,7 +235,19 @@ function CatalogTab({ onEdit, onNew, onStock }: { onEdit?: (p: Product) => void;
     },
     { id: "promoPrice", header: "Prix promo", accessor: (p) => (p.promo ? p.promoPrice : null), cell: (p) => (p.promo ? `${formatMoney(p.promoPrice ?? 0)} → ${formatDate(p.promoEndDate)}` : "—"), exportType: "money", align: "right", defaultHidden: true },
     { id: "marginRate", header: "Marge", accessor: (p) => p.marginRate, cell: (p) => formatPercent(p.marginRate), align: "right", exportType: "percent", hideOnMobile: true },
-    { id: "stock", header: "Stock", accessor: (p) => p.stock, cell: (p) => formatNumber(p.stock), align: "right", exportType: "number" },
+    ...sites.map<Column<Row>>((site) => ({
+      id: `stock-${site.id}`,
+      header: site.name,
+      accessor: (p) => p.bySite.get(site.id)?.quantity ?? 0,
+      cell: (p) => {
+        const level = p.bySite.get(site.id)
+        const qty = level?.quantity ?? 0
+        return <span className={qty <= alertThreshold(level ?? {}, p) ? "font-medium text-warning" : undefined}>{formatNumber(qty)}</span>
+      },
+      align: "right",
+      exportType: "number",
+    })),
+    { id: "stock", header: "Total", accessor: (p) => p.stock, cell: (p) => formatNumber(p.stock), align: "right", exportType: "number", defaultHidden: sites.length > 1 },
     { id: "stockValue", header: "Valeur stock", accessor: (p) => p.stockValue, cell: (p) => formatMoney(p.stockValue, { compact: true }), align: "right", exportType: "money", hideOnMobile: true, footer: (r) => formatMoney(r.reduce((s, p) => s + p.stockValue, 0), { compact: true }) },
     { id: "sold", header: "Vendus", accessor: (p) => p.sold, cell: (p) => formatNumber(p.sold), align: "right", exportType: "number", defaultHidden: true },
     {
@@ -238,7 +271,7 @@ function CatalogTab({ onEdit, onNew, onStock }: { onEdit?: (p: Product) => void;
     { id: "status", header: "Statut", accessor: (p) => (p.status === "actif" ? "Actif" : "Inactif"), defaultHidden: true },
   ]
 
-  const viewingLevels = viewing ? stockLevels.filter((l) => l.productId === viewing.id) : []
+  const viewingSites = viewing ? sites.map((site) => ({ site, level: viewing.bySite.get(site.id) })) : []
 
   return (
     <div className="flex flex-col gap-6">
@@ -320,26 +353,49 @@ function CatalogTab({ onEdit, onNew, onStock }: { onEdit?: (p: Product) => void;
                   { label: "Prix d'achat", value: formatMoney(viewing.purchasePrice) },
                   { label: "Prix de vente", value: formatMoney(viewing.salePrice) },
                   { label: "Marge unitaire", value: `${formatMoney(viewing.margin)} (${formatPercent(viewing.marginRate)})` },
-                  { label: "Seuil d'alerte", value: formatNumber(viewing.minStock) },
+                  { label: "Seuil d'alerte par défaut", value: formatNumber(viewing.minStock) },
                   { label: "Unités vendues", value: formatNumber(viewing.sold) },
                   { label: "Créé le", value: formatDate(viewing.createdAt) },
                   ...(viewing.description ? [{ label: "Description", value: viewing.description, full: true }] : []),
                 ]}
               />
             </DetailSection>
-            <DetailSection title="Stock par site">
+            <DetailSection
+              title="Stock par site"
+              actions={editableSites.length > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setEditingStock(viewing)}>
+                  <LuBoxes /> Renseigner
+                </Button>
+              )}
+            >
               <div className="flex flex-col divide-y rounded-lg border">
-                {viewingLevels.map((l) => (
-                  <div key={l.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                    <span>{locationName(l.locationId)}</span>
-                    <span className={l.quantity <= viewing.minStock ? "font-medium text-warning tabular" : "tabular"}>{formatNumber(l.quantity)}</span>
-                  </div>
-                ))}
+                {viewingSites.map(({ site, level }) => {
+                  const qty = level?.quantity ?? 0
+                  const min = alertThreshold(level ?? {}, viewing)
+                  return (
+                    <div key={site.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                      <div className="flex min-w-0 flex-col">
+                        <span className="truncate">{site.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          Seuil d&apos;alerte : {formatNumber(min)}{level?.minStock === undefined ? " (par défaut)" : ""}
+                        </span>
+                      </div>
+                      <span className={qty <= min ? "font-medium text-warning tabular" : "tabular"}>{formatNumber(qty)}</span>
+                    </div>
+                  )
+                })}
               </div>
             </DetailSection>
           </div>
         )}
       </DetailSheet>
+      <ProductStockDialog
+        open={!!editingStock}
+        onOpenChange={(o) => !o && setEditingStock(null)}
+        product={editingStock ?? undefined}
+        sites={editableSites}
+        levels={stockLevels}
+      />
       <ConfirmDialog
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}

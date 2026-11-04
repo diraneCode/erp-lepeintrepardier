@@ -24,6 +24,7 @@ import { formatDate, formatMoney, formatNumber } from "@/lib/format"
 import { inRange } from "@/lib/date-range"
 import { CITIES } from "@/lib/labels"
 import { useStore } from "@/lib/store"
+import { alertThreshold } from "@/lib/products"
 import type { Warehouse } from "@/lib/types"
 
 const statusDef = {
@@ -57,7 +58,7 @@ export default function WarehousesPage() {
           units,
           value: own.reduce((s, l) => s + l.quantity * (productById.get(l.productId)?.purchasePrice ?? 0), 0),
           refs: own.filter((l) => l.quantity > 0).length,
-          alerts: own.filter((l) => l.quantity <= (productById.get(l.productId)?.minStock ?? 0)).length,
+          alerts: own.filter((l) => l.quantity <= alertThreshold(l, productById.get(l.productId))).length,
           // Estimation : 1 m² ≈ 6 unités stockées
           occupancy: Math.min(100, (units / (w.capacity * 6)) * 100),
         }

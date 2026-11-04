@@ -50,6 +50,8 @@ interface Actions {
   createStockMovement: (movement: StockMovement) => Promise<boolean>
   /** Plusieurs produits en une seule opération : tout est enregistré, ou rien */
   createStockMovements: (movements: StockMovement[]) => Promise<boolean>
+  /** Stock et seuil d'alerte d'un produit, site par site (écarts tracés en ajustements) */
+  setProductStock: (productId: string, levels: { locationId: string; quantity: number; minStock?: number }[]) => Promise<boolean>
   setLeaveStatus: (id: string, status: Leave["status"], comment?: string) => Promise<boolean>
   setExpenseStatus: (ids: string[], status: Expense["status"]) => Promise<boolean>
   /** Renvoie le nombre de bulletins créés (-1 si échec) */
@@ -543,6 +545,18 @@ const rawActions: Actions = {
     if (error) return fail(error)
     const first = movements[0]
     rawActions.log("Mouvement", "Stock", `${first.reason}${first.reference ? ` · ${first.reference}` : ""} (${first.type}, ${movements.length} produit(s))`)
+    return true
+  },
+
+  setProductStock: async (productId, levels) => {
+    const { data, error } = await getSupabase().rpc("set_product_stock", {
+      p_product: productId,
+      p_levels: levels.map((l) => ({ ...l, minStock: l.minStock ?? null })),
+    })
+    refresh("stockLevels", "stockMovements")
+    if (error) return fail(error)
+    const name = getCached("products").find((p) => p.id === productId)?.name ?? productId
+    rawActions.log("Mise à jour", "Stock", `${name} : stock par site (${Number(data ?? 0)} ajustement(s))`)
     return true
   },
 

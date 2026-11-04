@@ -33,6 +33,7 @@ import { CITIES } from "@/lib/labels"
 import { useStore } from "@/lib/store"
 import { MONTHS_FR, monthTarget, targetForRange } from "@/lib/targets"
 import type { Shop } from "@/lib/types"
+import { alertThreshold } from "@/lib/products"
 import { cn } from "@/lib/utils"
 
 const statusDef = {
@@ -154,7 +155,7 @@ function PerformanceTab({ onEdit, onTargets, canDelete }: { onEdit?: (s: Shop) =
           achievement: target ? (revenue / target) * 100 : 0,
           staff: employees.filter((e) => e.locationId === shop.id && e.status !== "sorti").length,
           stockValue: stock.reduce((s, l) => s + l.quantity * (productById.get(l.productId)?.purchasePrice ?? 0), 0),
-          lowStock: stock.filter((l) => l.quantity <= (productById.get(l.productId)?.minStock ?? 0)).length,
+          lowStock: stock.filter((l) => l.quantity <= alertThreshold(l, productById.get(l.productId))).length,
         }
       }),
     [filters.filtered, periodSales, targets, period, levels, employees, productById]

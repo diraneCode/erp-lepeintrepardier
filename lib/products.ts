@@ -1,7 +1,7 @@
 import { differenceInCalendarDays } from "date-fns"
 
 import { toDate, toISODate } from "@/lib/format"
-import type { Product } from "@/lib/types"
+import type { Product, StockLevel } from "@/lib/types"
 
 /** Promotion en cours (prix promotionnel renseigné et non échu). */
 export function hasActivePromo(p: Product, today = toISODate(new Date())) {
@@ -11,6 +11,11 @@ export function hasActivePromo(p: Product, today = toISODate(new Date())) {
 /** Prix de vente appliqué en caisse (promotion comprise). */
 export function effectivePrice(p: Product, today = toISODate(new Date())) {
   return hasActivePromo(p, today) ? (p.promoPrice as number) : p.salePrice
+}
+
+/** Seuil d'alerte d'un site : le sien s'il est renseigné, sinon celui du produit. */
+export function alertThreshold(level: Pick<StockLevel, "minStock">, product?: Pick<Product, "minStock">) {
+  return level.minStock ?? product?.minStock ?? 0
 }
 
 export type ExpiryState = "perime" | "critique" | "proche" | "ok" | "sans"
