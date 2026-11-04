@@ -26,7 +26,6 @@ export const lineItemSchema = z
     quantity: z.number({ error: "Quantité requise" }).positive("Quantité > 0"),
     unitPrice: z.number({ error: "Prix requis" }).min(0, "Prix invalide"),
     discount: z.number({ error: "Remise requise" }).min(0).max(100, "Max 100 %"),
-    taxRate: z.number().min(0).max(100),
     section: z.enum(["traitement", "main_oeuvre", "accessoires"]).optional(),
     specification: z.string().optional(),
     packaging: z.string().optional(),
@@ -39,7 +38,7 @@ export const lineItemSchema = z
 
 export const lineItemsSchema = z.array(lineItemSchema).min(1, "Ajoutez au moins une ligne")
 
-export const emptyLine: LineItem = { productId: "", description: "", quantity: 1, unitPrice: 0, discount: 0, taxRate: 0 }
+export const emptyLine: LineItem = { productId: "", description: "", quantity: 1, unitPrice: 0, discount: 0 }
 /** Ligne sans article du catalogue (service, accessoire, prestation…) */
 export const emptyCustomLine: LineItem = { ...emptyLine, custom: true }
 
@@ -75,9 +74,9 @@ export function LineItemsEditor<T extends FieldValues>({
       <div className="hidden grid-cols-[minmax(0,1fr)_80px_120px_80px_120px_36px] gap-2 px-1 text-xs font-medium text-muted-foreground md:grid">
         <span>Produit</span>
         <span className="text-right">Qté</span>
-        <span className="text-right">P.U. HT</span>
+        <span className="text-right">Prix unitaire</span>
         <span className="text-right">Remise %</span>
-        <span className="text-right">Total HT</span>
+        <span className="text-right">Total</span>
         <span />
       </div>
       {fields.map((f, index) => {
@@ -117,7 +116,6 @@ export function LineItemsEditor<T extends FieldValues>({
                       if (p) {
                         setValue(`items.${index}.unitPrice`, effectivePrice(p), { shouldValidate: true })
                         setValue(`items.${index}.description`, p.name)
-                        setValue(`items.${index}.taxRate`, p.taxRate)
                       }
                     }}
                   />
@@ -215,13 +213,11 @@ export function LineItemsEditor<T extends FieldValues>({
           </Button>
         </div>
         <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-1.5 rounded-lg bg-muted/60 p-3 text-sm sm:w-72">
-          <dt className="text-muted-foreground">Total brut HT</dt>
+          <dt className="text-muted-foreground">Total brut</dt>
           <dd className="text-right tabular">{formatMoney(totals.gross)}</dd>
           <dt className="text-muted-foreground">Remises</dt>
           <dd className="text-right tabular">− {formatMoney(totals.discount)}</dd>
-          <dt className="text-muted-foreground">TVA</dt>
-          <dd className="text-right tabular">{formatMoney(totals.tax)}</dd>
-          <dt className="border-t pt-1.5 font-semibold">Total TTC</dt>
+          <dt className="border-t pt-1.5 font-semibold">Total</dt>
           <dd className="border-t pt-1.5 text-right font-semibold tabular">{formatMoney(totals.total)}</dd>
         </dl>
       </div>

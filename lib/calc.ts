@@ -9,20 +9,14 @@ export function lineSubtotal(item: LineItem) {
   return item.quantity * item.unitPrice * (1 - item.discount / 100)
 }
 
-export function lineTax(item: LineItem) {
-  return lineSubtotal(item) * (item.taxRate / 100)
-}
-
+/** Totaux d'un document : le total est le montant après remises. */
 export function documentTotals(items: LineItem[]) {
   const gross = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
-  const subtotal = items.reduce((s, i) => s + lineSubtotal(i), 0)
-  const tax = items.reduce((s, i) => s + lineTax(i), 0)
+  const total = items.reduce((s, i) => s + lineSubtotal(i), 0)
   return {
     gross: Math.round(gross),
-    discount: Math.round(gross - subtotal),
-    subtotal: Math.round(subtotal),
-    tax: Math.round(tax),
-    total: Math.round(subtotal + tax),
+    discount: Math.round(gross - total),
+    total: Math.round(total),
   }
 }
 

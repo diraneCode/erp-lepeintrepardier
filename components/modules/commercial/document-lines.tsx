@@ -17,7 +17,7 @@ export function DocumentLines({ items, paid }: { items: LineItem[]; paid?: numbe
               <th className="px-3 py-2 text-right font-medium">Qté</th>
               <th className="px-3 py-2 text-right font-medium">P.U.</th>
               <th className="px-3 py-2 text-right font-medium">Rem.</th>
-              <th className="px-3 py-2 text-right font-medium">Total HT</th>
+              <th className="px-3 py-2 text-right font-medium">Total</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -34,17 +34,15 @@ export function DocumentLines({ items, paid }: { items: LineItem[]; paid?: numbe
         </table>
       </div>
       <dl className="ml-auto grid w-full grid-cols-2 gap-x-6 gap-y-1.5 text-sm sm:w-72">
-        <dt className="text-muted-foreground">Total HT</dt>
-        <dd className="text-right tabular">{formatMoney(t.subtotal)}</dd>
         {t.discount > 0 && (
           <>
+            <dt className="text-muted-foreground">Total brut</dt>
+            <dd className="text-right tabular">{formatMoney(t.gross)}</dd>
             <dt className="text-muted-foreground">dont remises</dt>
             <dd className="text-right tabular">− {formatMoney(t.discount)}</dd>
           </>
         )}
-        <dt className="text-muted-foreground">TVA</dt>
-        <dd className="text-right tabular">{formatMoney(t.tax)}</dd>
-        <dt className="border-t pt-1.5 font-semibold">Total TTC</dt>
+        <dt className="border-t pt-1.5 font-semibold">Total</dt>
         <dd className="border-t pt-1.5 text-right font-semibold tabular">{formatMoney(t.total)}</dd>
         {paid !== undefined && (
           <>
@@ -65,7 +63,6 @@ export function toDocumentLines(items: LineItem[]): CommercialDocument["lines"] 
     quantity: i.quantity,
     unitPrice: i.unitPrice,
     discount: i.discount,
-    taxRate: i.taxRate,
     total: Math.round(lineSubtotal(i)),
   }))
 }

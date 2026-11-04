@@ -5,8 +5,6 @@
 -- À exécuter après 05_indexes.sql. Réexécutable : un article déjà présent (même
 -- référence) est mis à jour sans toucher à ses prix, son stock ni son statut.
 --
--- TVA à 0 % par défaut (modifiable produit par produit dans Produits).
---
 -- Le fichier ne contient ni prix ni quantités : les articles sont créés avec un
 -- prix d'achat et de vente à 0 FCFA, à compléter dans Produits (ou avec la
 -- requête de mise à jour en fin de script). Le stock initial se saisit par une
@@ -28,8 +26,8 @@ from (values
 where not exists (select 1 from public.categories x where upper(x.name) = c.name);
 
 -- Articles
-insert into public.products (sku, name, category_id, brand, unit, purchase_price, sale_price, tax_rate, min_stock, status, supplier, packaging)
-select v.sku, v.name, cat.id, v.brand, v.unit, 0, 0, 0, 0, 'actif', v.brand, v.packaging
+insert into public.products (sku, name, category_id, brand, unit, purchase_price, sale_price, min_stock, status, supplier, packaging)
+select v.sku, v.name, cat.id, v.brand, v.unit, 0, 0, 0, 'actif', v.brand, v.packaging
 from (values
   ('ISO-001', 'ISONEM THERMAL PAINT 10 L', 'ISONEM', 'piece', '10 L'),
   ('ISO-002', 'ISONEM BE 99 18 kg', 'ISONEM', 'piece', '18 kg'),
@@ -195,14 +193,6 @@ from public.categories c
 left join public.products p on p.category_id = c.id
 group by c.name
 order by c.name;
-
--- -----------------------------------------------------------------------------
--- Si ce script a déjà été exécuté avec l'ancienne TVA (19,25 %), pour repasser
--- les articles du showroom à 0 % (à exécuter séparément) :
---
--- update public.products set tax_rate = 0
--- where sku ~ '^(ISO|YAL|MOL|PAN|DIV)-[0-9]{3}$' and tax_rate = 19.25;
--- -----------------------------------------------------------------------------
 
 -- -----------------------------------------------------------------------------
 -- Mise à jour des prix (exemple, à adapter puis exécuter séparément) :

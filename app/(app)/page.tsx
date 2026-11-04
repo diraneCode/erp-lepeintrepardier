@@ -80,7 +80,6 @@ function Dashboard() {
     const before = prev ? sales.filter((s) => valid(s) && inRange(s.date, prev)) : []
     const revenue = cur.reduce((a, s) => a + documentTotals(s.items).total, 0)
     const revenuePrev = before.reduce((a, s) => a + documentTotals(s.items).total, 0)
-    const subtotal = cur.reduce((a, s) => a + documentTotals(s.items).subtotal, 0)
     const cogs = cur.reduce((a, s) => a + itemsCost(s.items, (id) => productById.get(id)?.purchasePrice ?? 0), 0)
     const exp = expenses.filter((e) => e.status !== "rejetee" && e.category !== "achats" && inRange(e.date, range)).reduce((a, e) => a + e.amount, 0)
     const expPrev = prev ? expenses.filter((e) => e.status !== "rejetee" && e.category !== "achats" && inRange(e.date, prev)).reduce((a, e) => a + e.amount, 0) : 0
@@ -95,10 +94,10 @@ function Dashboard() {
       revenueDelta: prev ? pctChange(revenue, revenuePrev) : undefined,
       count: cur.length,
       basket: cur.length ? revenue / cur.length : 0,
-      margin: subtotal - cogs,
+      margin: revenue - cogs,
       expenses: exp,
       expensesDelta: prev ? pctChange(exp, expPrev) : undefined,
-      result: subtotal - cogs - exp,
+      result: revenue - cogs - exp,
       collected,
       collectedDelta: prev ? pctChange(collected, collectedPrev) : undefined,
       overdue,
@@ -159,7 +158,7 @@ function Dashboard() {
                 title: "Synthèse d'activité",
                 subtitle: describeRange(range),
                 rows: [
-                  ["Chiffre d'affaires TTC", formatMoney(m.revenue)],
+                  ["Chiffre d'affaires", formatMoney(m.revenue)],
                   ["Nombre de ventes", formatNumber(m.count)],
                   ["Panier moyen", formatMoney(m.basket)],
                   ["Marge brute", formatMoney(m.margin)],
@@ -183,7 +182,7 @@ function Dashboard() {
       />
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        <StatCard index={0} label="Chiffre d'affaires TTC" value={formatMoney(m.revenue, { compact: true })} icon={LuCircleDollarSign} delta={m.revenueDelta} hint={m.revenueDelta === undefined ? `${m.count} ventes` : undefined} />
+        <StatCard index={0} label="Chiffre d'affaires" value={formatMoney(m.revenue, { compact: true })} icon={LuCircleDollarSign} delta={m.revenueDelta} hint={m.revenueDelta === undefined ? `${m.count} ventes` : undefined} />
         <StatCard index={1} label="Encaissements" value={formatMoney(m.collected, { compact: true })} icon={LuWallet} tone="green" delta={m.collectedDelta} />
         {global ? (
           <>
@@ -229,13 +228,13 @@ function Dashboard() {
           <TimeBarChart
             data={trend.data}
             series={[
-              { key: "revenue", label: "CA TTC", color: "var(--chart-1)" },
+              { key: "revenue", label: "CA", color: "var(--chart-1)" },
               ...(global ? [{ key: "expense", label: "Dépenses", color: "var(--chart-2)" }] : []),
             ]}
           />
         </ChartCard>
-        <ChartCard title="Ventes par catégorie" description="CA HT de la période">
-          <DonutChart data={byCategory} centerValue={formatMoney(m.revenue, { compact: true })} centerLabel="CA TTC" />
+        <ChartCard title="Ventes par catégorie" description="CA de la période">
+          <DonutChart data={byCategory} centerValue={formatMoney(m.revenue, { compact: true })} centerLabel="CA" />
         </ChartCard>
       </div>
 
@@ -271,7 +270,7 @@ function Dashboard() {
           </CardContent>
         </Card>
         {global ? (
-          <ChartCard title="Classement des boutiques" description="CA TTC de la période">
+          <ChartCard title="Classement des boutiques" description="CA de la période">
             <RankingBars items={byShop} />
           </ChartCard>
         ) : shops.length > 0 ? (
@@ -279,7 +278,7 @@ function Dashboard() {
             <MonthObjective shops={shops} targets={targets} sales={sales} />
           </ChartCard>
         ) : (
-          <ChartCard title="Mes meilleurs clients" description="CA TTC de la période">
+          <ChartCard title="Mes meilleurs clients" description="CA de la période">
             <RankingBars items={topClients} />
           </ChartCard>
         )}

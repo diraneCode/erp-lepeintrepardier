@@ -13,8 +13,6 @@ export const ACCOUNTS: Account[] = [
   { code: "421", name: "Personnel, rémunérations dues", class: 4 },
   { code: "431", name: "Sécurité sociale (CNPS)", class: 4 },
   { code: "4441", name: "État, impôts sur salaires", class: 4 },
-  { code: "4431", name: "TVA facturée", class: 4 },
-  { code: "4452", name: "TVA récupérable", class: 4 },
   { code: "521", name: "Banque", class: 5 },
   { code: "571", name: "Caisse", class: 5 },
   { code: "585", name: "Mobile Money", class: 5 },

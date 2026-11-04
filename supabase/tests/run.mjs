@@ -55,7 +55,7 @@ async function as(user, fn) {
     await db.exec(`reset role; select set_config('request.jwt.claim.sub', '', false);`)
   }
 }
-const line = (amount, productId = "") => JSON.stringify([{ productId, description: "Article", quantity: 1, unitPrice: amount, discount: 0, taxRate: 0 }])
+const line = (amount, productId = "") => JSON.stringify([{ productId, description: "Article", quantity: 1, unitPrice: amount, discount: 0 }])
 
 // Données de départ (insérées sans utilisateur : les automatismes ne s'appliquent pas)
 await db.exec(`
@@ -117,12 +117,12 @@ await as("mag", async () => {
 
 // ------------------------------------------------------------------ Ventes, factures, stock
 await as("cais", async () => {
-  const [{ s }] = await q(`select public.create_sale($1::jsonb, true) as s`, [JSON.stringify({ boutique_id: "s1", seller_id: "e2", client_id: "cl1", date: "2026-10-14", payment_method: "especes", status: "livree", channel: "boutique", items: [{ productId: "p1", description: "Acrylique", quantity: 2, unitPrice: 38500, discount: 0, taxRate: 0 }] })])
+  const [{ s }] = await q(`select public.create_sale($1::jsonb, true) as s`, [JSON.stringify({ boutique_id: "s1", seller_id: "e2", client_id: "cl1", date: "2026-10-14", payment_method: "especes", status: "livree", channel: "boutique", items: [{ productId: "p1", description: "Acrylique", quantity: 2, unitPrice: 38500, discount: 0 }] })])
   const [lvl] = await q(`select quantity from public.stock_levels where product_id = 'p1' and location_id = 's1'`)
   check("vente : stock décrémenté", lvl.quantity === 8, String(lvl.quantity))
   const [inv] = await q(`select status, amount_paid::int paid from public.invoices where sale_id = $1`, [s.id])
   check("vente : facture créée et soldée", inv.status === "payee" && inv.paid === 77000, JSON.stringify(inv))
-  check("vente : stock insuffisant refusé", (await fails(`select public.create_sale($1::jsonb, false)`, [JSON.stringify({ boutique_id: "s1", seller_id: "e2", date: "2026-10-14", payment_method: "especes", status: "livree", channel: "boutique", items: [{ productId: "p2", description: "G", quantity: 99, unitPrice: 1, discount: 0, taxRate: 0 }] })]))?.includes("Stock insuffisant"))
+  check("vente : stock insuffisant refusé", (await fails(`select public.create_sale($1::jsonb, false)`, [JSON.stringify({ boutique_id: "s1", seller_id: "e2", date: "2026-10-14", payment_method: "especes", status: "livree", channel: "boutique", items: [{ productId: "p2", description: "G", quantity: 99, unitPrice: 1, discount: 0 }] })]))?.includes("Stock insuffisant"))
   check("caissière : vente hors de sa boutique refusée", !!(await fails(`select public.create_sale($1::jsonb, false)`, [JSON.stringify({ boutique_id: "s2", seller_id: "e2", date: "2026-10-14", payment_method: "especes", status: "livree", channel: "boutique", items: JSON.parse(line(100)) })])))
 })
 
@@ -191,8 +191,11 @@ await as("admin", async () => {
   await q(`select public.generate_payslips('2026-12')`)
   const [{ ot }] = await q(`select overtime::int ot from public.payslips where employee_id = 'e3' and period = '2026-12'`)
   check("paie : heures sup. reprises (3 h → 6 200 FCFA)", ot === 6200, String(ot))
-  const [p] = await q(`insert into public.products (sku, name, category_id, unit, purchase_price, sale_price) values ('T-1', 'Test', 'c1', 'piece', 1, 2) returning tax_rate`)
-  check("produit : TVA à 0 % par défaut", Number(p.tax_rate) === 0)
+  const cols = (await q(`select column_name from information_schema.columns where table_schema = 'public' and table_name = 'products'`)).map((r) => r.column_name)
+  check("TVA : colonne retirée des produits", !cols.includes("tax_rate"))
+  const [inv] = await q(`insert into public.invoices (number, client_id, boutique_id, date, due_date, items, status) values ('', 'cl1', 's1', '2026-10-20', '2026-10-20', '[{"productId":"","description":"Service","quantity":2,"unitPrice":10000,"discount":10,"taxRate":19.25}]', 'emise') returning number`)
+  const [je] = await q(`select lines from public.journal_entries where reference = $1`, [inv.number])
+  check("TVA : facture comptabilisée sans TVA (411 / 701, total après remise)", je.lines.length === 2 && je.lines[0].debit === 18000 && !je.lines.some((l) => l.account === "4431"), JSON.stringify(je.lines))
 })
 await as("susp", async () => {
   check("compte suspendu : plus aucun accès", (await q(`select id from public.products`)).length === 0 && (await q(`select id from public.clients`)).length === 0)

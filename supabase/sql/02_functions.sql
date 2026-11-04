@@ -128,17 +128,13 @@ create trigger number_cash before insert on public.cash_movements for each row e
 -- -----------------------------------------------------------------------------
 -- Calculs de documents (identiques à lib/calc.ts)
 -- -----------------------------------------------------------------------------
-create or replace function app.doc_totals(p_items jsonb, out subtotal numeric, out tax numeric, out total numeric)
+-- Total d'un document : somme des lignes après remises (pas de TVA)
+drop function if exists app.doc_totals(jsonb);
+create or replace function app.doc_totals(p_items jsonb, out total numeric)
 language sql immutable set search_path = '' as $$
-  with l as (
-    select (i ->> 'quantity')::numeric * (i ->> 'unitPrice')::numeric * (1 - coalesce((i ->> 'discount')::numeric, 0) / 100) as sub,
-           coalesce((i ->> 'taxRate')::numeric, 0) as rate
-    from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) i
-  )
-  select round(coalesce(sum(sub), 0)),
-         round(coalesce(sum(sub * rate / 100), 0)),
-         round(coalesce(sum(sub), 0) + coalesce(sum(sub * rate / 100), 0))
-  from l
+  select round(coalesce(sum((i ->> 'quantity')::numeric * (i ->> 'unitPrice')::numeric
+                            * (1 - coalesce((i ->> 'discount')::numeric, 0) / 100)), 0))
+  from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) i
 $$;
 
 create or replace function app.treasury_account(p_method text) returns text
@@ -156,7 +152,7 @@ $$;
 
 create or replace function app.add_journal(p_date date, p_journal text, p_label text, p_reference text, p_lines jsonb)
 returns void language sql volatile security definer set search_path = '' as $$
-  -- Les lignes à zéro (ex. TVA d'une vente non taxée) ne sont pas reportées
+  -- Les lignes à zéro ne sont pas reportées
   insert into public.journal_entries (number, date, journal, label, reference, lines, status)
   values ('', p_date, p_journal, p_label, p_reference,
           coalesce((select jsonb_agg(l) from jsonb_array_elements(p_lines) l
@@ -175,7 +171,7 @@ $$;
 -- Automatismes
 -- -----------------------------------------------------------------------------
 
--- Facture émise → écriture de vente (411 / 701 / 4431)
+-- Facture émise → écriture de vente (411 / 701)
 create or replace function app.on_invoice_journal() returns trigger
 language plpgsql security definer set search_path = '' as $$
 declare t record;
@@ -186,8 +182,7 @@ begin
   select * into t from app.doc_totals(new.items);
   perform app.add_journal(new.date, 'VE', 'Facture ' || new.number, new.number, jsonb_build_array(
     jsonb_build_object('account', '411', 'label', 'Client — ' || new.number, 'debit', t.total, 'credit', 0),
-    jsonb_build_object('account', '701', 'label', 'Ventes de marchandises', 'debit', 0, 'credit', t.subtotal),
-    jsonb_build_object('account', '4431', 'label', 'TVA collectée', 'debit', 0, 'credit', t.tax)
+    jsonb_build_object('account', '701', 'label', 'Ventes de marchandises', 'debit', 0, 'credit', t.total)
   ));
   return new;
 end;
@@ -448,8 +443,6 @@ declare
   v_invoice public.invoices;
   v_item jsonb;
   v_total numeric;
-  v_sub numeric;
-  v_tax numeric;
 begin
   if v_role is null then
     raise exception 'Accès refusé : cette action n''est pas autorisée pour votre profil' using errcode = '42501';
@@ -496,12 +489,11 @@ begin
     end if;
   elsif v_sale.status <> 'brouillon' and v_sale.payment_method <> 'credit' then
     -- Vente payée sans facture (client comptoir) : écriture de vente et, en espèces, entrée en caisse
-    select subtotal, tax, total into v_sub, v_tax, v_total from app.doc_totals(v_sale.items);
+    select total into v_total from app.doc_totals(v_sale.items);
     perform app.add_journal(v_sale.date, case when v_sale.payment_method = 'especes' then 'CA' else 'BQ' end,
       'Vente ' || v_sale.number, v_sale.number, jsonb_build_array(
         jsonb_build_object('account', app.treasury_account(v_sale.payment_method), 'label', 'Vente comptoir', 'debit', v_total, 'credit', 0),
-        jsonb_build_object('account', '701', 'label', 'Ventes de marchandises', 'debit', 0, 'credit', v_sub),
-        jsonb_build_object('account', '4431', 'label', 'TVA collectée', 'debit', 0, 'credit', v_tax)
+        jsonb_build_object('account', '701', 'label', 'Ventes de marchandises', 'debit', 0, 'credit', v_total)
       ));
     if v_sale.payment_method = 'especes' then
       insert into public.cash_movements (number, date, location_id, direction, kind, amount, label, reference, client_name, sale_id)
@@ -522,8 +514,6 @@ declare
   v_role text := app.my_role();
   v_sale public.sales;
   v_item jsonb;
-  v_sub numeric;
-  v_tax numeric;
   v_total numeric;
   v_refund numeric;
 begin
@@ -544,13 +534,12 @@ begin
     end loop;
   end if;
   if v_sale.status <> 'brouillon' and v_sale.payment_method <> 'credit' then
-    select subtotal, tax, total into v_sub, v_tax, v_total from app.doc_totals(v_sale.items);
+    select total into v_total from app.doc_totals(v_sale.items);
     if v_sale.invoice_id is null then
       -- Contre-passation de l'écriture de vente comptoir
       perform app.add_journal((now() at time zone 'Africa/Douala')::date, case when v_sale.payment_method = 'especes' then 'CA' else 'BQ' end,
         'Annulation vente ' || v_sale.number, v_sale.number, jsonb_build_array(
-          jsonb_build_object('account', '701', 'label', 'Ventes de marchandises', 'debit', v_sub, 'credit', 0),
-          jsonb_build_object('account', '4431', 'label', 'TVA collectée', 'debit', v_tax, 'credit', 0),
+          jsonb_build_object('account', '701', 'label', 'Ventes de marchandises', 'debit', v_total, 'credit', 0),
           jsonb_build_object('account', app.treasury_account(v_sale.payment_method), 'label', 'Remboursement client', 'debit', 0, 'credit', v_total)
         ));
     end if;

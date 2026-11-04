@@ -31,8 +31,8 @@ begin
   end if;
 
   -- 1. Produits du fichier absents du catalogue
-  insert into public.products (sku, name, category_id, brand, unit, purchase_price, sale_price, tax_rate, min_stock, status, supplier, packaging)
-  select v.sku, v.name, c.id, v.brand, 'piece', 0, 0, 0, 0, 'actif', v.brand, v.packaging
+  insert into public.products (sku, name, category_id, brand, unit, purchase_price, sale_price, min_stock, status, supplier, packaging)
+  select v.sku, v.name, c.id, v.brand, 'piece', 0, 0, 0, 'actif', v.brand, v.packaging
   from (values
   ('ISO-151', 'ISONEM SB GRIS 10 kg', 'ISONEM', '10 kg'),
   ('ISO-152', 'ISONEM MS POLIA ROUGE 5 kg', 'ISONEM', '5 kg'),

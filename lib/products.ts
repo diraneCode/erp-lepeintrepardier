@@ -8,7 +8,7 @@ export function hasActivePromo(p: Product, today = toISODate(new Date())) {
   return p.promoPrice !== undefined && p.promoPrice > 0 && (!p.promoEndDate || p.promoEndDate >= today)
 }
 
-/** Prix de vente HT appliqué en caisse (promotion comprise). */
+/** Prix de vente appliqué en caisse (promotion comprise). */
 export function effectivePrice(p: Product, today = toISODate(new Date())) {
   return hasActivePromo(p, today) ? (p.promoPrice as number) : p.salePrice
 }

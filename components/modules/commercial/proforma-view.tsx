@@ -42,8 +42,6 @@ export function toProformaDocument(q: Quote, client: Client | undefined, product
           }
         }),
     })).filter((s) => s.lines.length > 0),
-    subtotal: t.subtotal,
-    tax: t.tax,
     total: t.total,
     amountInWords: amountInWords(t.total),
     validUntil: q.validUntil,
@@ -139,14 +137,8 @@ export function ProformaView({ doc }: { doc: ProformaDocument }) {
       ))}
 
       <div className="flex flex-col items-end gap-1.5">
-        {doc.tax > 0 && (
-          <>
-            <div className="flex w-full justify-between gap-4 sm:w-72"><span className="text-muted-foreground">Total projet HT</span><span className="tabular">{formatMoney(doc.subtotal)}</span></div>
-            <div className="flex w-full justify-between gap-4 sm:w-72"><span className="text-muted-foreground">TVA 19,25 %</span><span className="tabular">{formatMoney(doc.tax)}</span></div>
-          </>
-        )}
         <div className="flex w-full justify-between gap-4 rounded-md bg-success px-3 py-2 font-semibold text-success-foreground sm:w-72">
-          <span>{doc.tax > 0 ? "TOTAL PROJET TTC" : "TOTAL PROJET"}</span>
+          <span>TOTAL PROJET</span>
           <span className="tabular">{formatMoney(doc.total)}</span>
         </div>
       </div>

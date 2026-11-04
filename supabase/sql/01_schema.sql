@@ -106,7 +106,6 @@ create table if not exists public.products (
   unit text not null,
   purchase_price numeric(16, 2) not null check (purchase_price >= 0),
   sale_price numeric(16, 2) not null check (sale_price >= 0),
-  tax_rate numeric(5, 2) not null default 0,
   min_stock integer not null default 0,
   status text not null default 'actif' check (status in ('actif', 'inactif')),
   barcode text,
@@ -429,8 +428,8 @@ create table if not exists public.attendance (
   note text,
   unique (employee_id, date)
 );
--- Mise à niveau d'une base existante : TVA à 0 % par défaut sur les nouveaux produits
-alter table public.products alter column tax_rate set default 0;
+-- Mise à niveau d'une base existante : la TVA est retirée du système
+alter table public.products drop column if exists tax_rate;
 -- Mise à niveau d'une base existante : heures supplémentaires (en minutes)
 alter table public.attendance add column if not exists overtime_minutes integer not null default 0;
 do $$ begin
@@ -559,3 +558,19 @@ create table if not exists public.activity_logs (
   details text not null
 );
 create index if not exists activity_logs_user_idx on public.activity_logs (user_id, date desc);
+
+-- -----------------------------------------------------------------------------
+-- Mise à niveau : retrait de la TVA des données existantes
+-- (taux hérités dans les lignes de documents, lignes de TVA à zéro au journal)
+-- -----------------------------------------------------------------------------
+update public.sales set items = (select coalesce(jsonb_agg(i - 'taxRate'), '[]'::jsonb) from jsonb_array_elements(items) i)
+  where items::text like '%"taxRate"%';
+update public.invoices set items = (select coalesce(jsonb_agg(i - 'taxRate'), '[]'::jsonb) from jsonb_array_elements(items) i)
+  where items::text like '%"taxRate"%';
+update public.quotes set items = (select coalesce(jsonb_agg(i - 'taxRate'), '[]'::jsonb) from jsonb_array_elements(items) i)
+  where items::text like '%"taxRate"%';
+update public.journal_entries
+  set lines = (select coalesce(jsonb_agg(l), '[]'::jsonb) from jsonb_array_elements(lines) l
+               where not (l ->> 'account' in ('4431', '4452') and coalesce((l ->> 'debit')::numeric, 0) = 0 and coalesce((l ->> 'credit')::numeric, 0) = 0))
+  where exists (select 1 from jsonb_array_elements(lines) l where l ->> 'account' in ('4431', '4452')
+                and coalesce((l ->> 'debit')::numeric, 0) = 0 and coalesce((l ->> 'credit')::numeric, 0) = 0);

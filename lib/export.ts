@@ -251,8 +251,8 @@ export interface CommercialDocument {
   status?: string
   client: { name: string; address?: string; phone?: string; email?: string; code?: string }
   issuer?: string
-  lines: { description: string; quantity: number; unitPrice: number; discount: number; taxRate: number; total: number }[]
-  totals: { gross: number; discount: number; subtotal: number; tax: number; total: number }
+  lines: { description: string; quantity: number; unitPrice: number; discount: number; total: number }[]
+  totals: { gross: number; discount: number; total: number }
   paid?: number
   notes?: string
 }
@@ -300,29 +300,30 @@ export async function exportDocumentPDF(d: CommercialDocument) {
 
   autoTable(doc, {
     startY: 88,
-    head: [["Désignation", "Qté", "P.U. HT", "Remise", "TVA", "Total HT"]],
+    head: [["Désignation", "Qté", "Prix unitaire", "Remise", "Total"]],
     body: d.lines.map((l) => [
       l.description,
       formatNumber(l.quantity),
       formatMoney(l.unitPrice, { currency: false }),
       l.discount ? `${l.discount} %` : "—",
-      `${formatNumber(l.taxRate, 2)} %`,
       formatMoney(l.total, { currency: false }),
     ]),
     margin: { left: 14, right: 14 },
     styles: { fontSize: 8.5, cellPadding: 2.4, lineColor: [231, 230, 238], lineWidth: 0.1, textColor: [26, 24, 48] },
     headStyles: { fillColor: BRAND, textColor: 255 },
-    columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" } },
+    columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" }, 4: { halign: "right" } },
   })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let y = ((doc as any).lastAutoTable?.finalY ?? 120) + 8
   const rows: [string, string, boolean?][] = [
-    ["Total brut HT", formatMoney(d.totals.gross)],
-    ["Remises", d.totals.discount ? `− ${formatMoney(d.totals.discount)}` : formatMoney(0)],
-    ["Total HT", formatMoney(d.totals.subtotal)],
-    ["TVA", formatMoney(d.totals.tax)],
-    ["Total TTC", formatMoney(d.totals.total), true],
+    ...(d.totals.discount
+      ? ([
+          ["Total brut", formatMoney(d.totals.gross)],
+          ["Remises", `− ${formatMoney(d.totals.discount)}`],
+        ] as [string, string][])
+      : []),
+    ["Total", formatMoney(d.totals.total), true],
   ]
   if (d.paid !== undefined) {
     rows.push(["Déjà réglé", formatMoney(d.paid)])
@@ -449,8 +450,6 @@ export interface ProformaDocument {
     lines: { description: string; specification?: string; packaging?: string; coverage?: number; surface?: number; quantity: number; unitPrice: number; amount: number }[]
     total: number
   }[]
-  subtotal: number
-  tax: number
   total: number
   amountInWords: string
   validUntil?: string
@@ -575,12 +574,7 @@ export async function exportProformaPDF(d: ProformaDocument) {
   })
 
   // Totaux généraux
-  const totals: unknown[][] = []
-  if (d.tax > 0) {
-    totals.push(totalRow("TOTAL PROJET HT", d.subtotal, PF.blue))
-    totals.push(totalRow("TVA 19,25 %", d.tax, PF.blue))
-    totals.push(totalRow("TOTAL PROJET TTC", d.total, PF.green))
-  } else totals.push(totalRow("TOTAL PROJET", d.total, PF.green))
+  const totals: unknown[][] = [totalRow("TOTAL PROJET", d.total, PF.green)]
   autoTable(doc, {
     startY: y,
     margin: { left: M, right: M, bottom: 20 },

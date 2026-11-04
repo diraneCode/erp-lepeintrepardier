@@ -71,7 +71,7 @@ export default function FollowupsPage() {
         const q = qById.get(f.targetId)
         targetLabel = clientName(q?.clientId)
         targetSub = `Devis ${q?.number ?? ""}`
-        amount = q ? q.items.reduce((s, i) => s + i.quantity * i.unitPrice * (1 - i.discount / 100) * (1 + i.taxRate / 100), 0) : 0
+        amount = q ? q.items.reduce((s, i) => s + i.quantity * i.unitPrice * (1 - i.discount / 100), 0) : 0
       } else {
         const i = iById.get(f.targetId)
         targetLabel = clientName(i?.clientId)

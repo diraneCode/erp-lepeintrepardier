@@ -26,7 +26,6 @@ const productSchema = z
     unit: z.enum(["pot_1l", "pot_4l", "seau_20l", "sac_25kg", "piece", "rouleau", "kg", "litre", "m2"]),
     purchasePrice: z.number({ error: "Prix d'achat requis" }).min(0),
     salePrice: z.number({ error: "Prix de vente requis" }).positive("Doit être positif"),
-    taxRate: z.number({ error: "TVA requise" }).min(0).max(100),
     minStock: z.number({ error: "Seuil requis" }).int("Nombre entier").min(0),
     status: z.enum(["actif", "inactif"]),
     barcode: z.union([z.literal(""), z.string().trim().regex(/^\d{8,14}$/, "Code-barres EAN invalide (8 à 14 chiffres)")]),
@@ -59,7 +58,6 @@ const productDefaults = (p?: Product): ProductValues => ({
   unit: p?.unit ?? "pot_4l",
   purchasePrice: p?.purchasePrice ?? Number.NaN,
   salePrice: p?.salePrice ?? Number.NaN,
-  taxRate: p?.taxRate ?? 0,
   minStock: p?.minStock ?? 20,
   status: p?.status ?? "actif",
   barcode: p?.barcode ?? "",
@@ -124,9 +122,8 @@ function ProductFormDialogContent({ open, onOpenChange, product }: { open: boole
         </FormSection>
         <FormSection title="Prix & stock">
           <FormGrid cols={3}>
-            <NumberField control={form.control} name="purchasePrice" label="Prix d'achat HT" required suffix="FCFA" min={0} step={100} />
-            <NumberField control={form.control} name="salePrice" label="Prix de vente HT" required suffix="FCFA" min={0} step={100} />
-            <NumberField control={form.control} name="taxRate" label="TVA" suffix="%" min={0} step={0.25} />
+            <NumberField control={form.control} name="purchasePrice" label="Prix d'achat" required suffix="FCFA" min={0} step={100} />
+            <NumberField control={form.control} name="salePrice" label="Prix de vente" required suffix="FCFA" min={0} step={100} />
             <NumberField control={form.control} name="minStock" label="Seuil d'alerte" required min={0} description="Quantité minimale par site" />
             <SelectField control={form.control} name="status" label="Statut" required options={[{ value: "actif", label: "Actif" }, { value: "inactif", label: "Inactif" }]} />
             <div className="flex flex-col justify-center rounded-lg bg-muted/60 px-3 py-2 text-sm">
@@ -147,7 +144,7 @@ function ProductFormDialogContent({ open, onOpenChange, product }: { open: boole
             <SwitchField control={form.control} name="hasPromo" label="Prix promotionnel" description="Appliqué automatiquement en caisse" className="sm:col-span-3" />
             {hasPromo && (
               <>
-                <NumberField control={form.control} name="promoPrice" label="Prix promotionnel HT" required suffix="FCFA" min={0} step={100} />
+                <NumberField control={form.control} name="promoPrice" label="Prix promotionnel" required suffix="FCFA" min={0} step={100} />
                 <DateField control={form.control} name="promoEndDate" label="Fin de la promotion" required />
                 <div className="flex flex-col justify-center rounded-lg bg-muted/60 px-3 py-2 text-sm">
                   <span className="text-xs text-muted-foreground">Remise</span>

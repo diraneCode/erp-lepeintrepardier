@@ -84,7 +84,7 @@ function ShopTargetsDialogContent({
       open={open}
       onOpenChange={onOpenChange}
       title="Objectifs mensuels"
-      description="Chiffre d'affaires TTC à atteindre pour chaque mois."
+      description="Chiffre d'affaires à atteindre pour chaque mois."
       onSubmit={onSubmit}
       size="xl"
       submitLabel="Enregistrer les objectifs"

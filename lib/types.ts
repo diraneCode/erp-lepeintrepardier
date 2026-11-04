@@ -21,8 +21,6 @@ export interface LineItem {
   unitPrice: number
   /** Remise en % */
   discount: number
-  /** TVA en % */
-  taxRate: number
   /** Proforma : rubrique de la ligne */
   section?: LineSection
   /** Proforma : spécificité technique */
@@ -223,13 +221,12 @@ export interface Product {
   unit: ProductUnit
   purchasePrice: number
   salePrice: number
-  taxRate: number
   minStock: number
   status: "actif" | "inactif"
   /** Code-barres EAN (facultatif) */
   barcode?: string
   supplier: string
-  /** Prix de vente HT promotionnel (facultatif), appliqué en caisse s'il est renseigné */
+  /** Prix de vente promotionnel (facultatif), appliqué en caisse s'il est renseigné */
   promoPrice?: number
   /** Fin de validité du prix promotionnel (incluse) */
   promoEndDate?: string
@@ -274,7 +271,7 @@ export interface Shop {
   openedAt: string
 }
 
-/** Objectif de chiffre d'affaires TTC d'une boutique pour un mois donné */
+/** Objectif de chiffre d'affaires d'une boutique pour un mois donné */
 export interface ShopTarget {
   id: ID
   shopId: ID

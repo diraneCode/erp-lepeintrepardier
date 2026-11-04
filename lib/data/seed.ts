@@ -274,7 +274,6 @@ export function generateSeed(today = new Date()) {
     unit,
     purchasePrice: pp,
     salePrice: sp,
-    taxRate: 19.25,
     minStock: unit === "seau_20l" ? int(15, 30) : unit === "piece" && pp > 100_000 ? 2 : int(20, 60),
     status: i === 26 && chance(0.2) ? "inactif" : "actif",
     barcode: cat === "c5" || cat === "c6" ? (chance(0.5) ? `620${int(100000000, 999999999)}${int(0, 9)}` : undefined) : `620${int(100000000, 999999999)}${int(0, 9)}`,
@@ -310,7 +309,6 @@ export function generateSeed(today = new Date()) {
       coverage: cov,
       purchasePrice: pp,
       salePrice: sp,
-      taxRate: 19.25,
       minStock: int(10, 25),
       status: "actif",
       barcode: `869${int(100000000, 999999999)}${int(0, 9)}`,
@@ -338,7 +336,6 @@ export function generateSeed(today = new Date()) {
         quantity: qty,
         unitPrice: p.salePrice,
         discount: bulk ? pick([0, 0, 5, 10]) : pick([0, 0, 0, 5]),
-        taxRate: p.taxRate,
       })
     }
     return items
@@ -481,7 +478,6 @@ export function generateSeed(today = new Date()) {
     const [project, area, unit, treatment, families] = pick(PROJECTS)
     const client = pick(clients)
     const surface = round(int(40, 1200), 10)
-    const tax = chance(0.5) ? 19.25 : 0
     const chosen = families
       .map((f) => products.find((p) => p.name.startsWith(f) && (p.unit !== "pot_1l")) ?? products.find((p) => p.name.includes(f)))
       .filter((p, k, arr): p is Product => !!p && arr.indexOf(p) === k)
@@ -493,7 +489,6 @@ export function generateSeed(today = new Date()) {
         quantity: cov > 0 ? Math.max(1, Math.round(surface / cov)) : int(1, 3),
         unitPrice: p.salePrice,
         discount: 0,
-        taxRate: tax,
         section: "traitement",
         specification: p.specification,
         packaging: p.packaging ?? unitSuffix[p.unit] ?? undefined,
@@ -504,9 +499,9 @@ export function generateSeed(today = new Date()) {
     const labourLines: LineItem[] = [...LABOUR]
       .sort(() => rand() - 0.5)
       .slice(0, int(1, 3))
-      .map(([label, pu]) => ({ productId: "", custom: true, description: label, quantity: surface, unitPrice: pu, discount: 0, taxRate: tax, section: "main_oeuvre" }))
+      .map(([label, pu]) => ({ productId: "", custom: true, description: label, quantity: surface, unitPrice: pu, discount: 0, section: "main_oeuvre" }))
     const accessoryLines: LineItem[] = chance(0.75)
-      ? [{ productId: "", custom: true, description: pick(ACCESSORIES), quantity: 1, unitPrice: round(int(50_000, 400_000), 10_000), discount: 0, taxRate: tax, section: "accessoires" }]
+      ? [{ productId: "", custom: true, description: pick(ACCESSORIES), quantity: 1, unitPrice: round(int(50_000, 400_000), 10_000), discount: 0, section: "accessoires" }]
       : []
     const ym = format(date, "yyyy/MM")
     const seq = (monthSeq.get(ym) ?? 0) + 1
@@ -769,8 +764,7 @@ export function generateSeed(today = new Date()) {
       status: "valide",
       lines: [
         { account: "411", label: `Client — ${inv.number}`, debit: t.total, credit: 0 },
-        { account: "701", label: "Ventes de marchandises", debit: 0, credit: t.subtotal },
-        { account: "4431", label: "TVA collectée 19,25 %", debit: 0, credit: t.tax },
+        { account: "701", label: "Ventes de marchandises", debit: 0, credit: t.total },
       ],
     })
   }

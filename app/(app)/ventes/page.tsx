@@ -42,7 +42,7 @@ import { paymentMethod, saleChannel, saleStatus, toOptions } from "@/lib/labels"
 import { nextNumber, uid, useStore } from "@/lib/store"
 import type { Sale } from "@/lib/types"
 
-type Row = Sale & { subtotal: number; total: number; margin: number; units: number }
+type Row = Sale & { total: number; margin: number; units: number }
 
 export default function SalesPage() {
   const { sales } = useScopedData(["sales"])
@@ -63,7 +63,7 @@ export default function SalesPage() {
     const cost = (id: string) => productById.get(id)?.purchasePrice ?? 0
     return sales.map((s) => {
       const t = documentTotals(s.items)
-      return { ...s, subtotal: t.subtotal, total: t.total, margin: t.subtotal - itemsCost(s.items, cost), units: s.items.reduce((u, i) => u + i.quantity, 0) }
+      return { ...s, total: t.total, margin: t.total - itemsCost(s.items, cost), units: s.items.reduce((u, i) => u + i.quantity, 0) }
     })
   }, [sales, productById])
 
@@ -82,7 +82,7 @@ export default function SalesPage() {
         { id: "client", label: "Client", options: [{ value: "", label: "Client comptoir" }, ...clientOptions.filter((o) => acc.global || clientIdsSold.has(o.value))], accessor: (s) => s.clientId ?? "" },
       ],
       ranges: [
-        { id: "total", label: "Montant TTC", unit: "FCFA", accessor: (s) => s.total },
+        { id: "total", label: "Montant", unit: "FCFA", accessor: (s) => s.total },
         { id: "margin", label: "Marge brute", unit: "FCFA", accessor: (s) => s.margin },
       ],
     }),
@@ -95,7 +95,6 @@ export default function SalesPage() {
   const kpis = React.useMemo(() => {
     const revenue = valid.reduce((s, r) => s + r.total, 0)
     const margin = valid.reduce((s, r) => s + r.margin, 0)
-    const subtotal = valid.reduce((s, r) => s + r.subtotal, 0)
     const prev = previousRange(filters.state.date ?? {})
     let prevRevenue: number | undefined
     if (prev) {
@@ -110,7 +109,7 @@ export default function SalesPage() {
       count: valid.length,
       basket: valid.length ? revenue / valid.length : 0,
       margin,
-      marginRate: subtotal ? (margin / subtotal) * 100 : 0,
+      marginRate: revenue ? (margin / revenue) * 100 : 0,
       delta: prevRevenue !== undefined ? pctChange(revenue, prevRevenue) : undefined,
     }
   }, [valid, rows, filters.state])
@@ -172,8 +171,7 @@ export default function SalesPage() {
     { id: "channel", header: "Canal", accessor: (s) => saleChannel[s.channel], hideOnMobile: true, defaultHidden: true },
     { id: "payment", header: "Paiement", accessor: (s) => paymentMethod[s.paymentMethod], hideOnMobile: true },
     { id: "units", header: "Articles", accessor: (s) => s.units, align: "right", exportType: "number", hideOnMobile: true, defaultHidden: true },
-    { id: "subtotal", header: "Total HT", accessor: (s) => s.subtotal, cell: (s) => formatMoney(s.subtotal), align: "right", exportType: "money", defaultHidden: true, footer: (r) => formatMoney(r.reduce((a, s) => a + s.subtotal, 0)) },
-    { id: "total", header: "Total TTC", accessor: (s) => s.total, cell: (s) => <span className="font-medium">{formatMoney(s.total)}</span>, align: "right", exportType: "money", footer: (r) => formatMoney(r.reduce((a, s) => a + s.total, 0)) },
+    { id: "total", header: "Total", accessor: (s) => s.total, cell: (s) => <span className="font-medium">{formatMoney(s.total)}</span>, align: "right", exportType: "money", footer: (r) => formatMoney(r.reduce((a, s) => a + s.total, 0)) },
     { id: "margin", header: "Marge", accessor: (s) => s.margin, cell: (s) => formatMoney(s.margin), align: "right", exportType: "money", hideOnMobile: true, footer: (r) => formatMoney(r.reduce((a, s) => a + s.margin, 0)) },
     { id: "status", header: "Statut", accessor: (s) => saleStatus[s.status].label, cell: (s) => <StatusBadge def={saleStatus[s.status]} /> },
   ]
@@ -199,27 +197,27 @@ export default function SalesPage() {
         </CardContent>
       </Card>
       <StatGrid>
-        <StatCard index={0} label="Chiffre d'affaires TTC" value={formatMoney(kpis.revenue, { compact: true })} icon={LuCircleDollarSign} delta={kpis.delta} />
+        <StatCard index={0} label="Chiffre d'affaires" value={formatMoney(kpis.revenue, { compact: true })} icon={LuCircleDollarSign} delta={kpis.delta} />
         <StatCard index={1} label="Nombre de ventes" value={formatNumber(kpis.count)} icon={LuShoppingBag} tone="blue" hint="hors brouillons et annulations" />
         <StatCard index={2} label="Panier moyen" value={formatMoney(kpis.basket, { compact: true })} icon={LuShoppingCart} tone="orange" />
         <StatCard index={3} label="Marge brute" value={formatMoney(kpis.margin, { compact: true })} icon={LuTrendingUp} tone="green" hint={`taux ${formatPercent(kpis.marginRate)}`} />
       </StatGrid>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <ChartCard title="Évolution du chiffre d'affaires" description={`CA TTC et marge brute par ${trend.granularity}`} className="xl:col-span-2">
+        <ChartCard title="Évolution du chiffre d'affaires" description={`CA et marge brute par ${trend.granularity}`} className="xl:col-span-2">
           <TimeBarChart
             data={trend.data}
             series={[
-              { key: "revenue", label: "CA TTC", color: "var(--chart-1)" },
+              { key: "revenue", label: "CA", color: "var(--chart-1)" },
               { key: "margin", label: "Marge brute", color: "var(--chart-2)" },
             ]}
           />
         </ChartCard>
-        <ChartCard title={acc.global ? "Répartition par boutique" : "Répartition par canal"} description="Part du CA TTC">
+        <ChartCard title={acc.global ? "Répartition par boutique" : "Répartition par canal"} description="Part du CA">
           <DonutChart data={byShop} centerValue={formatMoney(kpis.revenue, { compact: true })} centerLabel="CA total" />
         </ChartCard>
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <ChartCard title="Meilleurs produits" description="CA HT sur la période">
+        <ChartCard title="Meilleurs produits" description="CA sur la période">
           <RankingBars items={topProducts} />
         </ChartCard>
         <Card className="xl:col-span-2">
@@ -236,7 +234,7 @@ export default function SalesPage() {
                 title: "Journal des ventes",
                 subtitle: filters.describe(),
                 summary: [
-                  { label: "CA TTC", value: formatMoney(kpis.revenue) },
+                  { label: "CA", value: formatMoney(kpis.revenue) },
                   { label: "Ventes", value: formatNumber(kpis.count) },
                   { label: "Panier moyen", value: formatMoney(kpis.basket) },
                   { label: "Marge brute", value: formatMoney(kpis.margin) },
@@ -295,7 +293,7 @@ export default function SalesPage() {
                   { label: "Vendeur", value: employeeName(viewing.sellerId) },
                   { label: "Canal", value: saleChannel[viewing.channel] },
                   { label: "Paiement", value: paymentMethod[viewing.paymentMethod] },
-                  { label: "Marge brute", value: `${formatMoney(viewing.margin)} (${formatPercent(viewing.subtotal ? (viewing.margin / viewing.subtotal) * 100 : 0)})` },
+                  { label: "Marge brute", value: `${formatMoney(viewing.margin)} (${formatPercent(viewing.total ? (viewing.margin / viewing.total) * 100 : 0)})` },
                   { label: "Facture", value: viewing.invoiceId ? useStore.getState().invoices.find((i) => i.id === viewing.invoiceId)?.number ?? "—" : "Non facturée" },
                   ...(viewing.notes ? [{ label: "Notes", value: viewing.notes, full: true }] : []),
                 ]}

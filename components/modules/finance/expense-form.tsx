@@ -75,7 +75,7 @@ function ExpenseFormDialogContent({ open, onOpenChange, expense }: { open: boole
       <FormGrid>
         <TextField control={form.control} name="description" label="Objet" required className="sm:col-span-2" placeholder="Ex : Carburant camion livraison" />
         <SelectField control={form.control} name="category" label="Catégorie" required options={toOptions(expenseCategory)} />
-        <NumberField control={form.control} name="amount" label="Montant TTC" required suffix="FCFA" min={0} step={500} />
+        <NumberField control={form.control} name="amount" label="Montant" required suffix="FCFA" min={0} step={500} />
         <TextField control={form.control} name="supplier" label="Fournisseur / bénéficiaire" required />
         <DateField control={form.control} name="date" label="Date de la dépense" required />
         <SelectField control={form.control} name="paymentMethod" label="Mode de paiement" required options={toOptions(paymentMethod).filter((o) => o.value !== "credit")} />

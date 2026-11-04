@@ -195,10 +195,10 @@ function CatalogTab({ onEdit, onNew, onStock }: { onEdit?: (p: Product) => void;
     { id: "sku", header: "SKU", accessor: (p) => p.sku, defaultHidden: true },
     { id: "category", header: "Catégorie", accessor: (p) => categoryName(p.categoryId), hideOnMobile: true },
     { id: "unit", header: "Cond.", accessor: (p) => productUnit[p.unit], hideOnMobile: true, defaultHidden: true },
-    { id: "purchasePrice", header: "Achat HT", accessor: (p) => p.purchasePrice, cell: (p) => formatMoney(p.purchasePrice), align: "right", exportType: "money", hideOnMobile: true },
+    { id: "purchasePrice", header: "Achat", accessor: (p) => p.purchasePrice, cell: (p) => formatMoney(p.purchasePrice), align: "right", exportType: "money", hideOnMobile: true },
     {
       id: "salePrice",
-      header: "Vente HT",
+      header: "Vente",
       accessor: (p) => p.salePrice,
       cell: (p) =>
         p.promo ? (
@@ -317,10 +317,9 @@ function CatalogTab({ onEdit, onNew, onStock }: { onEdit?: (p: Product) => void;
                   { label: "Code-barres", value: viewing.barcode ? <span className="font-mono">{viewing.barcode}</span> : "Non renseigné" },
                   { label: "Prix promotionnel", value: viewing.promo ? `${formatMoney(viewing.promoPrice ?? 0)} jusqu'au ${formatDate(viewing.promoEndDate)}` : "Aucun" },
                   { label: "Péremption", value: viewing.expiryDate ? <StatusBadge def={{ ...expiryDef[viewing.expiry], label: `${formatDate(viewing.expiryDate)} · ${expiryDef[viewing.expiry].label}` }} /> : "Sans péremption" },
-                  { label: "Prix d'achat HT", value: formatMoney(viewing.purchasePrice) },
-                  { label: "Prix de vente HT", value: formatMoney(viewing.salePrice) },
+                  { label: "Prix d'achat", value: formatMoney(viewing.purchasePrice) },
+                  { label: "Prix de vente", value: formatMoney(viewing.salePrice) },
                   { label: "Marge unitaire", value: `${formatMoney(viewing.margin)} (${formatPercent(viewing.marginRate)})` },
-                  { label: "TVA", value: `${viewing.taxRate} %` },
                   { label: "Seuil d'alerte", value: formatNumber(viewing.minStock) },
                   { label: "Unités vendues", value: formatNumber(viewing.sold) },
                   { label: "Créé le", value: formatDate(viewing.createdAt) },

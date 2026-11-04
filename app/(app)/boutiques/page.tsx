@@ -141,7 +141,6 @@ function PerformanceTab({ onEdit, onTargets, canDelete }: { onEdit?: (s: Shop) =
       filters.filtered.map((shop) => {
         const own = periodSales.filter((s) => s.boutiqueId === shop.id)
         const revenue = own.reduce((s, x) => s + documentTotals(x.items).total, 0)
-        const subtotal = own.reduce((s, x) => s + documentTotals(x.items).subtotal, 0)
         const cost = own.reduce((s, x) => s + itemsCost(x.items, (id) => productById.get(id)?.purchasePrice ?? 0), 0)
         const target = targetForRange(targets, shop, period)
         const stock = levels.filter((l) => l.locationId === shop.id)
@@ -150,7 +149,7 @@ function PerformanceTab({ onEdit, onTargets, canDelete }: { onEdit?: (s: Shop) =
           revenue,
           count: own.length,
           basket: own.length ? revenue / own.length : 0,
-          margin: subtotal - cost,
+          margin: revenue - cost,
           target,
           achievement: target ? (revenue / target) * 100 : 0,
           staff: employees.filter((e) => e.locationId === shop.id && e.status !== "sorti").length,
@@ -186,7 +185,7 @@ function PerformanceTab({ onEdit, onTargets, canDelete }: { onEdit?: (s: Shop) =
                 title: "Performance des boutiques",
                 subtitle: filters.describe(),
                 summary: [
-                  { label: "CA TTC", value: formatMoney(k.revenue) },
+                  { label: "CA", value: formatMoney(k.revenue) },
                   { label: "Objectif", value: formatMoney(k.target) },
                   { label: "Réalisation", value: formatPercent(k.target ? (k.revenue / k.target) * 100 : 0) },
                   { label: "Ventes", value: formatNumber(k.count) },
@@ -196,7 +195,7 @@ function PerformanceTab({ onEdit, onTargets, canDelete }: { onEdit?: (s: Shop) =
                   { header: "Code", value: (s: Row) => s.code },
                   { header: "Boutique", value: (s: Row) => s.name },
                   { header: "Responsable", value: (s: Row) => employeeName(s.managerId) },
-                  { header: "CA TTC", value: (s: Row) => s.revenue, type: "money" },
+                  { header: "CA", value: (s: Row) => s.revenue, type: "money" },
                   { header: "Objectif", value: (s: Row) => Math.round(s.target), type: "money" },
                   { header: "Réalisation", value: (s: Row) => s.achievement, type: "percent" },
                   { header: "Ventes", value: (s: Row) => s.count, type: "number" },
@@ -216,7 +215,7 @@ function PerformanceTab({ onEdit, onTargets, canDelete }: { onEdit?: (s: Shop) =
         <StatCard index={3} label="Effectif en boutique" value={formatNumber(k.staff)} icon={LuUsers} tone="orange" />
       </StatGrid>
       {data.length > 1 && (
-        <ChartCard title="Chiffre d'affaires par boutique" description={`CA TTC par ${trend.granularity} sur la période`}>
+        <ChartCard title="Chiffre d'affaires par boutique" description={`CA par ${trend.granularity} sur la période`}>
           <TimeLineChart data={trend.data} series={data.slice(0, 5).map((s, i) => ({ key: s.id, label: s.name.replace("Boutique ", ""), color: SERIES_COLORS[i] }))} />
         </ChartCard>
       )}
@@ -366,7 +365,7 @@ function TargetsTab({ year, onYearChange, onEdit }: { year: number; onYearChange
               getOptions={() => ({
                 filename: `objectifs-boutiques-${year}`,
                 title: `Objectifs mensuels ${year}`,
-                subtitle: "Objectif / réalisé (CA TTC) par mois",
+                subtitle: "Objectif / réalisé (CA) par mois",
                 orientation: "landscape",
                 rows: selected,
                 columns: [
@@ -438,7 +437,7 @@ function TargetsTab({ year, onYearChange, onEdit }: { year: number; onYearChange
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-muted-foreground">Chaque cellule : objectif (gris), réalisé et taux d&apos;atteinte. Les montants sont en FCFA TTC.</p>
+      <p className="text-xs text-muted-foreground">Chaque cellule : objectif (gris), réalisé et taux d&apos;atteinte. Les montants sont en FCFA.</p>
     </div>
   )
 }

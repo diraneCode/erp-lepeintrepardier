@@ -88,7 +88,7 @@ export default function QuotesPage() {
         { id: "client", label: "Client", options: acc.global ? clientOptions : scopedClients.map((c) => ({ value: c.id, label: c.name })), accessor: (q) => q.clientId },
         ...(acc.global ? [{ id: "owner", label: "Commercial", options: employeeOptions, accessor: (q: Row) => q.ownerId }] : []),
       ],
-      ranges: [{ id: "total", label: "Montant TTC", unit: "FCFA", accessor: (q) => q.total }],
+      ranges: [{ id: "total", label: "Montant", unit: "FCFA", accessor: (q) => q.total }],
     }),
     [clientById, clientOptions, employeeOptions, acc.global, scopedClients]
   )

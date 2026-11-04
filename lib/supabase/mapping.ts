@@ -31,7 +31,7 @@ export function toDb(obj: Record<string, unknown>): Record<string, unknown> {
 const LOCAL_ONLY = new Set(["read"])
 
 const NUMERIC_COLUMNS = new Set([
-  "monthly_target", "amount", "base_salary", "purchase_price", "sale_price", "tax_rate", "promo_price", "coverage",
+  "monthly_target", "amount", "base_salary", "purchase_price", "sale_price", "promo_price", "coverage",
   "credit_limit", "potential", "amount_paid", "budget", "spent", "revenue", "value", "min_amount", "cost", "fee",
   "overtime", "bonuses", "transport_allowance", "housing_allowance", "other_deductions",
 ])

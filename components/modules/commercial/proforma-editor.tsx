@@ -19,7 +19,6 @@ import { cn } from "@/lib/utils"
 export interface ProformaForm {
   items: LineItem[]
   surfaces: SurfaceRow[]
-  applyTax: boolean
 }
 
 const num = (v: string) => (v === "" ? Number.NaN : Number(v))
@@ -55,7 +54,6 @@ export function ProformaEditor({
   const watchedItems = useWatch({ control, name: "items" }) as LineItem[] | undefined
   const items = React.useMemo(() => watchedItems ?? [], [watchedItems])
   const surfaces = (useWatch({ control, name: "surfaces" }) ?? []) as SurfaceRow[]
-  const applyTax = useWatch({ control, name: "applyTax" })
   const { productById, productOptions } = useLookups(["productById", "productOptions"])
 
   const projectSurface = surfaces.filter((s) => s.unit === "m²").reduce((s, r) => s + (Number.isFinite(r.quantity) ? r.quantity : 0), 0)
@@ -74,7 +72,6 @@ export function ProformaEditor({
     quantity: Number.isFinite(i.quantity) ? i.quantity : 0,
     unitPrice: Number.isFinite(i.unitPrice) ? i.unitPrice : 0,
     discount: 0,
-    taxRate: applyTax ? 19.25 : 0,
   }))
   const totals = sectionTotals(safe)
 
@@ -86,7 +83,6 @@ export function ProformaEditor({
       quantity: section === "main_oeuvre" ? projectSurface || 1 : 1,
       unitPrice: Number.NaN,
       discount: 0,
-      taxRate: applyTax ? 19.25 : 0,
       section,
       surface: section === "traitement" && projectSurface ? projectSurface : undefined,
     })
@@ -268,16 +264,8 @@ export function ProformaEditor({
               <dd className="text-right tabular">{formatMoney(totals[s])}</dd>
             </React.Fragment>
           ))}
-          <dt className="border-t pt-1.5 font-semibold">{applyTax ? "Total projet HT" : "Total projet"}</dt>
-          <dd className="border-t pt-1.5 text-right font-semibold tabular">{formatMoney(totals.subtotal)}</dd>
-          {applyTax && (
-            <>
-              <dt className="text-muted-foreground">TVA 19,25 %</dt>
-              <dd className="text-right tabular">{formatMoney(totals.tax)}</dd>
-              <dt className="font-semibold">Total TTC</dt>
-              <dd className="text-right font-semibold tabular">{formatMoney(totals.total)}</dd>
-            </>
-          )}
+          <dt className="border-t pt-1.5 font-semibold">Total projet</dt>
+          <dd className="border-t pt-1.5 text-right font-semibold tabular">{formatMoney(totals.total)}</dd>
         </dl>
         <p className="text-xs text-muted-foreground italic sm:max-w-md sm:text-right">
           Arrêté la présente facture proforma à la somme de <span className="font-medium text-foreground not-italic">{amountInWords(totals.total)}</span>

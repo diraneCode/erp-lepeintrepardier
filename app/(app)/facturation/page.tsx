@@ -120,7 +120,7 @@ function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
         },
       ],
       ranges: [
-        { id: "total", label: "Montant TTC", unit: "FCFA", accessor: (r) => r.total },
+        { id: "total", label: "Montant", unit: "FCFA", accessor: (r) => r.total },
         { id: "balance", label: "Reste à payer", unit: "FCFA", accessor: (r) => r.balance },
       ],
     }),
@@ -208,7 +208,7 @@ function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
       hideOnMobile: true,
     },
     { id: "shop", header: "Point de vente", accessor: (r) => shopName(r.boutiqueId), hideOnMobile: true, defaultHidden: true },
-    { id: "total", header: "Montant TTC", accessor: (r) => r.total, cell: (r) => formatMoney(r.total), align: "right", exportType: "money", footer: (rs) => formatMoney(rs.reduce((s, r) => s + r.total, 0)) },
+    { id: "total", header: "Montant", accessor: (r) => r.total, cell: (r) => formatMoney(r.total), align: "right", exportType: "money", footer: (rs) => formatMoney(rs.reduce((s, r) => s + r.total, 0)) },
     { id: "paid", header: "Réglé", accessor: (r) => r.amountPaid, cell: (r) => formatMoney(r.amountPaid), align: "right", exportType: "money", hideOnMobile: true, footer: (rs) => formatMoney(rs.reduce((s, r) => s + r.amountPaid, 0)) },
     {
       id: "balance",
@@ -249,7 +249,7 @@ function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
           </CardContent>
         </Card>
         <StatGrid>
-          <StatCard index={0} label="Facturé TTC" value={formatMoney(kpis.billed, { compact: true })} icon={LuReceipt} hint={`${formatNumber(kpis.count)} factures`} />
+          <StatCard index={0} label="Facturé" value={formatMoney(kpis.billed, { compact: true })} icon={LuReceipt} hint={`${formatNumber(kpis.count)} factures`} />
           <StatCard index={1} label="Encaissé" value={formatMoney(kpis.collected, { compact: true })} icon={LuCircleDollarSign} tone="green" hint={`taux de recouvrement ${formatPercent(kpis.rate)}`} />
           <StatCard index={2} label="Reste à encaisser" value={formatMoney(kpis.outstanding, { compact: true })} icon={LuHourglass} tone="orange" />
           <StatCard index={3} label="En retard" value={formatMoney(kpis.lateAmount, { compact: true })} icon={LuCircleAlert} tone="red" hint={`${kpis.lateCount} facture(s)`} />
@@ -283,7 +283,7 @@ function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
                 title: "Registre des factures",
                 subtitle: filters.describe(),
                 summary: [
-                  { label: "Facturé TTC", value: formatMoney(kpis.billed) },
+                  { label: "Facturé", value: formatMoney(kpis.billed) },
                   { label: "Encaissé", value: formatMoney(kpis.collected) },
                   { label: "Reste à encaisser", value: formatMoney(kpis.outstanding) },
                   { label: "En retard", value: formatMoney(kpis.lateAmount) },

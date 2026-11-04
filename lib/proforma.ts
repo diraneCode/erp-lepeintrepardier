@@ -26,7 +26,7 @@ export function sectionTotals(items: LineItem[]) {
   const totals = Object.fromEntries(SECTIONS.map((s) => [s, 0])) as Record<LineSection, number>
   for (const i of items) totals[sectionOf(i)] += Math.round(lineSubtotal(i))
   const t = documentTotals(items)
-  return { ...totals, subtotal: t.subtotal, tax: t.tax, total: t.total }
+  return { ...totals, total: t.total }
 }
 
 /** Numéro de proforma : NN/AAAA/MM (séquence du mois). */

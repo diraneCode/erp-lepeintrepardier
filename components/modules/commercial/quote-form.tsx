@@ -7,7 +7,7 @@ import { z } from "zod"
 import { toast } from "sonner"
 import { addDays, format } from "date-fns"
 
-import { ComboboxField, DateField, SelectField, SwitchField, TextareaField, TextField } from "@/components/forms/fields"
+import { ComboboxField, DateField, SelectField, TextareaField, TextField } from "@/components/forms/fields"
 import { lineItemsSchema } from "@/components/forms/line-items-editor"
 import { FormDialog, FormGrid, FormSection } from "@/components/shared/form-dialog"
 import { ProformaEditor, type ProformaForm } from "@/components/modules/commercial/proforma-editor"
@@ -39,7 +39,6 @@ const schema = z
     issuedIn: z.string().trim().min(2, "Ville requise"),
     surfaces: z.array(surfaceSchema),
     items: lineItemsSchema,
-    applyTax: z.boolean(),
     notes: z.string().optional(),
   })
   .refine((v) => v.validUntil >= v.date, { path: ["validUntil"], message: "Doit être postérieure à la date de la proforma" })
@@ -57,7 +56,6 @@ const defaults = (q?: Quote, ownerId = "", clientId = ""): FormValues => ({
   surfaces: q?.surfaces ?? [{ designation: "", quantity: Number.NaN, unit: "m²", treatment: "", commercialName: "" }],
   // Les anciennes lignes sans rubrique sont rangées dans « Traitement »
   items: q?.items.map((i) => ({ ...i, section: i.section ?? "traitement", custom: i.custom ?? !i.productId })) ?? [],
-  applyTax: q ? q.items.some((i) => i.taxRate > 0) : false,
   notes: q?.notes ?? "",
 })
 
@@ -86,8 +84,8 @@ function QuoteFormDialogContent({
   }, [open, quote, form, acc.global, me, defaultClientId])
 
   const onSubmit = form.handleSubmit(async (values) => {
-    const { applyTax, ...rest } = values
-    const items: LineItem[] = values.items.map((i) => ({ ...i, discount: 0, taxRate: applyTax ? 19.25 : 0 }))
+    const { items: lines, ...rest } = values
+    const items: LineItem[] = lines.map((i) => ({ ...i, discount: 0 }))
     if (quote) {
       if (!(await update("quotes", quote.id, { ...rest, items }))) return
       toast.success("Proforma mise à jour", { description: quote.number })
@@ -130,7 +128,6 @@ function QuoteFormDialogContent({
           error={itemsError}
         />
         <FormGrid>
-          <SwitchField control={form.control} name="applyTax" label="Appliquer la TVA (19,25 %)" description="Désactivée : montants présentés hors taxes, comme sur la proforma type" />
           <TextareaField control={form.control} name="notes" label="Conditions / notes" rows={3} placeholder="Délais, conditions de paiement…" />
         </FormGrid>
       </div>
