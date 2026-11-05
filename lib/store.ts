@@ -45,6 +45,10 @@ interface Actions {
   createSale: (sale: Sale, opts?: { createInvoice?: boolean }) => Promise<boolean>
   cancelSale: (id: string) => Promise<boolean>
   createInvoice: (invoice: Invoice) => Promise<boolean>
+  /** Modifie une facture non annulée (écriture de vente recalculée, statut selon les encaissements) */
+  updateInvoice: (id: string, patch: Pick<Invoice, "clientId" | "boutiqueId" | "date" | "dueDate" | "items" | "status" | "notes">) => Promise<boolean>
+  /** Supprime des factures avec leurs règlements, écritures et relances */
+  deleteInvoices: (ids: string[]) => Promise<boolean>
   recordPayment: (payment: Payment) => Promise<boolean>
   convertQuoteToInvoice: (quoteId: string) => Promise<Invoice | null>
   createStockMovement: (movement: StockMovement) => Promise<boolean>
@@ -509,6 +513,25 @@ const rawActions: Actions = {
     const ok = await rawActions.add("invoices", invoice)
     if (ok) rawActions.log("Création", "Facturation", `Facture ${invoice.number}`)
     return ok
+  },
+
+  updateInvoice: async (id, patch) => {
+    const { error } = await getSupabase().rpc("update_invoice", { p_id: id, p: patch })
+    refresh("invoices", "journalEntries")
+    return error ? fail(error) : true
+  },
+
+  deleteInvoices: async (ids) => {
+    // Une à une : chaque facture est supprimée avec ses règlements dans sa propre transaction
+    for (const id of ids) {
+      const { error } = await getSupabase().rpc("delete_invoice", { p_id: id })
+      if (error) {
+        refresh("invoices", "payments", "journalEntries", "cashMovements", "followups", "quotes")
+        return fail(error)
+      }
+    }
+    refresh("invoices", "payments", "journalEntries", "cashMovements", "followups", "quotes")
+    return true
   },
 
   recordPayment: async (payment) => {

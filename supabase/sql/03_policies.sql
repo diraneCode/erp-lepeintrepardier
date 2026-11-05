@@ -142,7 +142,8 @@ create policy quotes_insert on public.quotes for insert to authenticated
   with check ((select app.is_admin()) or ((select app.my_employee_id()) is not null and owner_id = (select app.my_employee_id())));
 create policy quotes_update on public.quotes for update to authenticated
   using ((select app.is_admin()) or ((select app.my_employee_id()) is not null and owner_id = (select app.my_employee_id())));
-create policy quotes_delete on public.quotes for delete to authenticated using ((select app.is_admin()));
+create policy quotes_delete on public.quotes for delete to authenticated
+  using ((select app.is_admin()) or ((select app.my_employee_id()) is not null and owner_id = (select app.my_employee_id())));
 
 -- -----------------------------------------------------------------------------
 -- Ventes (création via public.create_sale) & facturation

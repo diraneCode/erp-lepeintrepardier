@@ -998,6 +998,129 @@ end;
 $$;
 
 -- -----------------------------------------------------------------------------
+-- Factures : modification et suppression (administration, caissière de la boutique)
+-- -----------------------------------------------------------------------------
+create or replace function app.can_bill(p_boutique text) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select coalesce(app.is_admin() or (app.my_role() = 'caissiere' and p_boutique = app.my_location()), false)
+$$;
+
+-- Lignes d'un document réduites aux produits et quantités (comparaison avec la vente d'origine)
+create or replace function app.item_quantities(p_items jsonb) returns jsonb
+language sql immutable set search_path = '' as $$
+  select coalesce(jsonb_agg(jsonb_build_array(coalesce(i ->> 'productId', ''), (i ->> 'quantity')::numeric)
+                            order by coalesce(i ->> 'productId', ''), (i ->> 'quantity')::numeric), '[]'::jsonb)
+  from jsonb_array_elements(coalesce(p_items, '[]'::jsonb)) i
+$$;
+
+-- Modifie une facture non annulée. Une facture émise reste émise : son statut suit
+-- les encaissements et son écriture de vente est recalculée.
+create or replace function public.update_invoice(p_id text, p jsonb)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  v_old public.invoices;
+  v_new public.invoices;
+  v_total numeric;
+  v_status text;
+begin
+  select * into v_old from public.invoices where id = p_id for update;
+  if not found then
+    raise exception 'Facture introuvable' using errcode = 'P0001';
+  end if;
+  if not app.can_bill(v_old.boutique_id) or not app.can_bill(coalesce(p ->> 'boutiqueId', v_old.boutique_id)) then
+    raise exception 'Accès refusé : vous ne pouvez pas modifier cette facture' using errcode = '42501';
+  end if;
+  if v_old.status = 'annulee' then
+    raise exception 'Une facture annulée ne peut plus être modifiée' using errcode = 'P0001';
+  end if;
+  if v_old.sale_id is not null and app.item_quantities(p -> 'items') <> app.item_quantities(v_old.items) then
+    raise exception 'Les produits et quantités viennent de la vente % : annulez la vente pour les corriger',
+      (select number from public.sales where id = v_old.sale_id) using errcode = 'P0001';
+  end if;
+  select total into v_total from app.doc_totals(p -> 'items');
+  if v_old.amount_paid > v_total then
+    raise exception 'Le nouveau total (% FCFA) est inférieur au montant déjà encaissé (% FCFA)',
+      app.fmt_amount(v_total), app.fmt_amount(v_old.amount_paid) using errcode = 'P0001';
+  end if;
+  v_status := case
+    when v_old.status = 'brouillon' then case when p ->> 'status' = 'emise' then 'emise' else 'brouillon' end
+    when v_old.amount_paid > 0 and v_old.amount_paid >= v_total then 'payee'
+    when v_old.amount_paid > 0 then 'partielle'
+    else 'emise' end;
+
+  update public.invoices set
+    client_id = coalesce(p ->> 'clientId', client_id),
+    boutique_id = coalesce(p ->> 'boutiqueId', boutique_id),
+    date = coalesce((p ->> 'date')::date, date),
+    due_date = coalesce((p ->> 'dueDate')::date, due_date),
+    items = coalesce(p -> 'items', items),
+    notes = nullif(p ->> 'notes', ''),
+    status = v_status
+  where id = p_id
+  returning * into v_new;
+
+  -- Facture déjà émise : l'écriture de vente est remplacée (une émission depuis le brouillon passe par le déclencheur)
+  if v_old.status <> 'brouillon' then
+    delete from public.journal_entries where journal = 'VE' and reference = v_old.number;
+    perform app.add_journal(v_new.date, 'VE', 'Facture ' || v_new.number, v_new.number, jsonb_build_array(
+      jsonb_build_object('account', '411', 'label', 'Client — ' || v_new.number, 'debit', v_total, 'credit', 0),
+      jsonb_build_object('account', '701', 'label', 'Ventes de marchandises', 'debit', 0, 'credit', v_total)
+    ));
+  end if;
+  perform app.log('Modification', 'Facturation', 'Facture ' || v_new.number);
+end;
+$$;
+
+-- Supprime une facture et ce qui en découle : règlements, écritures, relances.
+-- Les espèces encaissées sortent de la caisse par une opération d'annulation (le brouillard n'est jamais réécrit).
+create or replace function public.delete_invoice(p_id text)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  v_inv public.invoices;
+  v_cash numeric;
+begin
+  select * into v_inv from public.invoices where id = p_id for update;
+  if not found then
+    raise exception 'Facture introuvable' using errcode = 'P0001';
+  end if;
+  if not app.can_bill(v_inv.boutique_id) then
+    raise exception 'Accès refusé : vous ne pouvez pas supprimer cette facture' using errcode = '42501';
+  end if;
+  -- La vente porte le stock et la caisse de cette facture : c'est elle qu'on annule
+  if v_inv.sale_id is not null then
+    raise exception 'Cette facture provient de la vente % : annulez la vente plutôt que de supprimer la facture',
+      (select number from public.sales where id = v_inv.sale_id) using errcode = 'P0001';
+  end if;
+
+  select coalesce(sum(c.amount), 0) into v_cash
+  from public.cash_movements c join public.payments pm on pm.id = c.payment_id
+  where pm.invoice_id = p_id and c.direction = 'entree';
+  if v_cash > 0 and v_inv.status <> 'annulee' then
+    insert into public.cash_movements (number, location_id, direction, kind, amount, label, reference)
+    values ('', v_inv.boutique_id, 'sortie', 'annulation', v_cash, 'Suppression de la facture ' || v_inv.number, v_inv.number);
+  end if;
+
+  delete from public.journal_entries
+  where (journal = 'VE' and reference = v_inv.number) or label = 'Règlement ' || v_inv.number;
+  delete from public.followups where target_type = 'facture' and target_id = p_id;
+  update public.quotes set invoice_id = null where invoice_id = p_id;
+  delete from public.invoices where id = p_id; -- règlements supprimés en cascade
+  perform app.log('Suppression', 'Facturation', 'Facture ' || v_inv.number);
+end;
+$$;
+
+-- Proforma supprimée : ses relances disparaissent avec elle
+create or replace function app.on_quote_deleted() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  delete from public.followups where target_type = 'devis' and target_id = old.id;
+  return old;
+end;
+$$;
+drop trigger if exists quote_deleted on public.quotes;
+create trigger quote_deleted after delete on public.quotes for each row execute function app.on_quote_deleted();
+
+-- -----------------------------------------------------------------------------
 -- Fiche produit : stock et seuil d'alerte renseignés site par site.
 -- p_levels : [{ locationId, quantity, minStock }] (minStock vide : seuil du produit).
 -- Chaque écart de quantité est tracé par un mouvement « ajustement ».
@@ -1095,9 +1218,9 @@ revoke all on function public.employee_directory(), public.create_sale(jsonb, bo
   public.convert_quote_to_invoice(text), public.convert_prospect(text), public.complete_followup(text, text, date, text),
   public.generate_followups(), public.generate_payslips(text), public.mark_notifications_read(text[]), public.nav_counters(), public.cash_expense(jsonb),
   public.create_inventory(jsonb), public.save_inventory_counts(text, jsonb), public.validate_inventory(text), public.cancel_inventory(text),
-  public.set_product_stock(text, jsonb) from public, anon;
+  public.set_product_stock(text, jsonb), public.update_invoice(text, jsonb), public.delete_invoice(text) from public, anon;
 grant execute on function public.employee_directory(), public.create_sale(jsonb, boolean), public.cancel_sale(text),
   public.convert_quote_to_invoice(text), public.convert_prospect(text), public.complete_followup(text, text, date, text),
   public.generate_followups(), public.generate_payslips(text), public.mark_notifications_read(text[]), public.nav_counters(), public.cash_expense(jsonb),
   public.create_inventory(jsonb), public.save_inventory_counts(text, jsonb), public.validate_inventory(text), public.cancel_inventory(text),
-  public.set_product_stock(text, jsonb) to authenticated;
+  public.set_product_stock(text, jsonb), public.update_invoice(text, jsonb), public.delete_invoice(text) to authenticated;

@@ -220,7 +220,7 @@ export default function QuotesPage() {
                 >
                   <LuSend /> Marquer envoyés
                 </Button>
-                {acc.global && (
+                {acc.write && (
                   <Button variant="destructive" size="sm" onClick={() => setToDelete(sel.map((q) => q.id))}>
                     <LuTrash2 /> Supprimer
                   </Button>
@@ -231,13 +231,13 @@ export default function QuotesPage() {
               <RowActions
                 actions={[
                   { label: "Voir", icon: LuEye, onSelect: () => setViewing(q) },
-                  { label: "Modifier", icon: LuPencil, onSelect: () => openEdit(q), hidden: !!q.invoiceId || !acc.write },
+                  { label: "Modifier", icon: LuPencil, onSelect: () => openEdit(q), hidden: !acc.write },
                   { label: "Télécharger PDF", icon: LuFileDown, onSelect: () => downloadPdf(q) },
                   { label: "Marquer envoyé", icon: LuSend, onSelect: () => update("quotes", q.id, { status: "envoye" }), hidden: q.status !== "brouillon" || !acc.write },
                   { label: "Transformer en facture", icon: LuReceipt, onSelect: () => toInvoice(q), hidden: !!q.invoiceId || q.status === "refuse" || !acc.write || !canInvoice },
                   { label: "Programmer une relance", icon: LuSend, onSelect: () => setFollowPreset({ targetType: "devis", targetId: q.id, subject: `Relance devis ${q.number}` }), hidden: !canFollowup || (q.status !== "envoye" && q.status !== "brouillon") },
                   { label: "Dupliquer", icon: LuCopy, onSelect: () => duplicate(q), hidden: !acc.write },
-                  { label: "Supprimer", icon: LuTrash2, destructive: true, separatorBefore: true, onSelect: () => setToDelete([q.id]), hidden: !acc.global || !acc.write },
+                  { label: "Supprimer", icon: LuTrash2, destructive: true, separatorBefore: true, onSelect: () => setToDelete([q.id]), hidden: !acc.write },
                 ]}
               />
             )}
@@ -294,7 +294,7 @@ export default function QuotesPage() {
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}
         title={`Supprimer ${toDelete?.length ?? 0} devis ?`}
-        description="Cette action est irréversible."
+        description="Cette action est irréversible. Les relances prévues sont supprimées ; une facture déjà établie à partir du devis est conservée."
         confirmLabel="Supprimer"
         destructive
         onConfirm={async () => {

@@ -69,7 +69,7 @@ function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
   const { invoices, payments } = useScopedData(["invoices", "payments"])
   const acc = useModuleAccess("facturation")
   const update = useStore((s) => s.update)
-  const remove = useStore((s) => s.remove)
+  const deleteInvoices = useStore((s) => s.deleteInvoices)
   const { clientName, clientById, clientOptions, shopOptions, shopName } = useLookups(["clientName", "clientById", "clientOptions", "shopOptions", "shopName"])
 
   const [formOpen, setFormOpen] = useTransientState(false)
@@ -317,7 +317,7 @@ function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
                   >
                     <LuSend /> Relancer
                   </Button>
-                  {acc.global && (
+                  {acc.write && (
                     <Button variant="destructive" size="sm" onClick={() => setToDelete(sel.map((r) => r.id))}>
                       <LuTrash2 /> Supprimer
                     </Button>
@@ -330,10 +330,11 @@ function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
                     { label: "Voir", icon: LuEye, onSelect: () => setViewingId(r.id) },
                     { label: "Encaisser", icon: LuBanknote, onSelect: () => setPaying(r), hidden: r.balance <= 0 || r.status === "brouillon" || r.status === "annulee" || !acc.write },
                     { label: "Émettre", icon: LuSend, onSelect: () => update("invoices", r.id, { status: "emise" }), hidden: r.status !== "brouillon" || !acc.write },
-                    { label: "Modifier", icon: LuPencil, onSelect: () => openEdit(r), hidden: r.status !== "brouillon" || !acc.write },
+                    { label: "Modifier", icon: LuPencil, onSelect: () => openEdit(r), hidden: r.status === "annulee" || !acc.write },
                     { label: "Télécharger PDF", icon: LuFileDown, onSelect: () => downloadPdf(r) },
                     { label: "Programmer une relance", icon: LuSend, onSelect: () => setFollowPreset({ targetType: "facture", targetId: r.id, subject: `Relance paiement ${r.number}` }), hidden: r.balance <= 0 || r.status === "brouillon" || r.status === "annulee" || !canFollowup },
                     { label: "Annuler la facture", icon: LuBan, destructive: true, separatorBefore: true, onSelect: () => setToCancel(r), hidden: r.status === "annulee" || r.status === "payee" || !acc.global || !acc.write },
+                    { label: "Supprimer", icon: LuTrash2, destructive: true, onSelect: () => setToDelete([r.id]), hidden: !!r.saleId || !acc.write },
                   ]}
                 />
               )}
@@ -360,6 +361,11 @@ function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
               <Button variant="outline" onClick={() => downloadPdf(viewing)}>
                 <LuFileDown /> PDF
               </Button>
+              {viewing.status !== "annulee" && acc.write && (
+                <Button variant="outline" onClick={() => { const inv = viewing; setViewingId(null); openEdit(inv) }}>
+                  <LuPencil /> Modifier
+                </Button>
+              )}
               {viewing.balance > 0 && viewing.status !== "brouillon" && viewing.status !== "annulee" && acc.write && (
                 <Button onClick={() => setPaying(viewing)}>
                   <LuBanknote /> Encaisser
@@ -426,12 +432,13 @@ function InvoicesTab({ tabs, tab }: { tabs: React.ReactNode; tab: string }) {
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}
         title={`Supprimer ${toDelete?.length ?? 0} facture(s) ?`}
-        description="Action irréversible. Pour conserver une trace comptable, préférez l'annulation."
+        description="Action irréversible : les encaissements et écritures comptables sont supprimés, et les espèces encaissées sortent de la caisse. Les factures issues d'une vente se corrigent en annulant la vente."
         confirmLabel="Supprimer"
         destructive
         onConfirm={async () => {
           if (toDelete) {
-            if (!(await remove("invoices", toDelete))) return
+            if (!(await deleteInvoices(toDelete))) return
+            setViewingId(null)
           }
           toast.success("Facture(s) supprimée(s)")
           setToDelete(null)
