@@ -44,6 +44,8 @@ interface Actions {
   /* Actions métier (fonctions SQL transactionnelles) */
   createSale: (sale: Sale, opts?: { createInvoice?: boolean }) => Promise<boolean>
   cancelSale: (id: string) => Promise<boolean>
+  /** Modifie une vente : stock, facture liée, encaissement et caisse ajustés sur les écarts */
+  updateSale: (id: string, patch: Pick<Sale, "date" | "boutiqueId" | "sellerId" | "clientId" | "channel" | "paymentMethod" | "status" | "items" | "notes">) => Promise<boolean>
   createInvoice: (invoice: Invoice) => Promise<boolean>
   /** Modifie une facture non annulée (écriture de vente recalculée, statut selon les encaissements) */
   updateInvoice: (id: string, patch: Pick<Invoice, "clientId" | "boutiqueId" | "date" | "dueDate" | "items" | "status" | "notes">) => Promise<boolean>
@@ -501,6 +503,14 @@ const rawActions: Actions = {
     const { error } = await getSupabase().rpc("create_sale", { p_sale: row(sale), p_create_invoice: !!opts?.createInvoice })
     refresh("sales", "invoices", "payments", "stockMovements", "clients")
     return error ? fail(error) : true
+  },
+
+  updateSale: async (id, patch) => {
+    const { error } = await getSupabase().rpc("update_sale", { p_id: id, p: { ...patch, clientId: patch.clientId ?? "", notes: patch.notes ?? "" } })
+    refresh("sales", "invoices", "payments", "stockLevels", "stockMovements", "cashMovements", "journalEntries")
+    if (error) return fail(error)
+    rawActions.log("Modification", "Ventes", `Vente ${getCached("sales").find((s) => s.id === id)?.number ?? id}`)
+    return true
   },
 
   cancelSale: async (id) => {

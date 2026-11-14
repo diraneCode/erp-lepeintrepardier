@@ -14,6 +14,7 @@ import { useLookups } from "@/hooks/use-lookups"
 import { useCurrentUser, useModuleAccess } from "@/hooks/use-access"
 import { paymentMethod, saleChannel, saleStatus, toOptions } from "@/lib/labels"
 import { nextNumber, uid, useStore } from "@/lib/store"
+import type { Sale } from "@/lib/types"
 import { lazyDialog } from "@/components/shared/lazy-dialog"
 
 const COUNTER = "__comptoir__"
@@ -37,21 +38,22 @@ const schema = z
   })
 type FormValues = z.infer<typeof schema>
 
-const defaults = (): FormValues => ({
-  date: format(new Date(), "yyyy-MM-dd"),
-  boutiqueId: "",
-  sellerId: "",
-  clientId: COUNTER,
-  channel: "boutique",
-  paymentMethod: "especes",
-  status: "livree",
-  items: [{ ...emptyLine }],
-  createInvoice: true,
-  notes: "",
+const defaults = (sale?: Sale): FormValues => ({
+  date: sale?.date ?? format(new Date(), "yyyy-MM-dd"),
+  boutiqueId: sale?.boutiqueId ?? "",
+  sellerId: sale?.sellerId ?? "",
+  clientId: sale ? sale.clientId ?? COUNTER : COUNTER,
+  channel: sale?.channel ?? "boutique",
+  paymentMethod: sale?.paymentMethod ?? "especes",
+  status: sale?.status ?? "livree",
+  items: sale?.items ?? [{ ...emptyLine }],
+  createInvoice: !sale,
+  notes: sale?.notes ?? "",
 })
 
-function SaleFormDialogContent({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+function SaleFormDialogContent({ open, onOpenChange, sale }: { open: boolean; onOpenChange: (o: boolean) => void; sale?: Sale }) {
   const createSale = useStore((s) => s.createSale)
+  const updateSale = useStore((s) => s.updateSale)
   const { clientOptions, employeeOptions, employeeById, shopOptions: allShops } = useLookups(["clientOptions", "employeeOptions", "employeeById", "shopOptions"])
   const acc = useModuleAccess("ventes")
   const me = useCurrentUser()
@@ -63,11 +65,27 @@ function SaleFormDialogContent({ open, onOpenChange }: { open: boolean; onOpenCh
   const clientId = useWatch({ control: form.control, name: "clientId" })
 
   React.useEffect(() => {
-    if (open) form.reset({ ...defaults(), sellerId: acc.global ? "" : me?.id ?? "", boutiqueId: !acc.global && myShop ? myShop.value : "" })
-  }, [open, form, acc.global, me, myShop])
+    if (!open) return
+    if (sale) form.reset(defaults(sale))
+    else form.reset({ ...defaults(), sellerId: acc.global ? "" : me?.id ?? "", boutiqueId: !acc.global && myShop ? myShop.value : "" })
+  }, [open, sale, form, acc.global, me, myShop])
+
+  // Modification : les quantités de la vente sont déjà sorties du stock de sa boutique
+  const stockCredit = React.useMemo(() => {
+    if (!sale || sale.status === "brouillon" || sale.boutiqueId !== boutiqueId) return undefined
+    const credit: Record<string, number> = {}
+    sale.items.forEach((i) => i.productId && (credit[i.productId] = (credit[i.productId] ?? 0) + i.quantity))
+    return credit
+  }, [sale, boutiqueId])
 
   const onSubmit = form.handleSubmit(async (values) => {
     const { createInvoice, clientId: cid, ...rest } = values
+    if (sale) {
+      if (!(await updateSale(sale.id, { ...rest, clientId: cid === COUNTER ? null : cid }))) return
+      toast.success("Vente modifiée", { description: `${sale.number} — stock et encaissement ajustés` })
+      onOpenChange(false)
+      return
+    }
     const number = nextNumber("VTE", useStore.getState().sales)
     if (!(await createSale({ ...rest, id: uid("v"), number, clientId: cid === COUNTER ? null : cid }, { createInvoice: createInvoice && cid !== COUNTER }))) return
     toast.success("Vente enregistrée", { description: `${number} — stock mis à jour` })
@@ -78,11 +96,17 @@ function SaleFormDialogContent({ open, onOpenChange }: { open: boolean; onOpenCh
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Nouvelle vente"
-      description="Le stock de la boutique est décrémenté à la validation."
+      title={sale ? `Modifier la vente ${sale.number}` : "Nouvelle vente"}
+      description={
+        sale
+          ? sale.invoiceId
+            ? "Seuls les écarts sont répercutés : stock, facture liée, encaissement et caisse."
+            : "Seuls les écarts sont répercutés : stock, écriture de vente et caisse."
+          : "Le stock de la boutique est décrémenté à la validation."
+      }
       onSubmit={onSubmit}
       size="xl"
-      submitLabel="Valider la vente"
+      submitLabel={sale ? "Enregistrer les modifications" : "Valider la vente"}
     >
       <div className="flex flex-col gap-6">
         <FormSection title="Vente">
@@ -110,10 +134,12 @@ function SaleFormDialogContent({ open, onOpenChange }: { open: boolean; onOpenCh
             control={form.control}
             setValue={form.setValue}
             locationId={boutiqueId || undefined}
+            stockCredit={stockCredit}
             error={form.formState.errors.items?.root?.message ?? form.formState.errors.items?.message}
           />
         </FormSection>
         <FormGrid>
+          {!sale && (
           <SwitchField
             control={form.control}
             name="createInvoice"
@@ -121,6 +147,7 @@ function SaleFormDialogContent({ open, onOpenChange }: { open: boolean; onOpenCh
             description={clientId === COUNTER ? "Disponible uniquement pour un client identifié" : "Une facture est créée et le paiement enregistré (sauf crédit)"}
             disabled={clientId === COUNTER}
           />
+          )}
           <TextareaField control={form.control} name="notes" label="Notes" rows={3} />
         </FormGrid>
       </div>

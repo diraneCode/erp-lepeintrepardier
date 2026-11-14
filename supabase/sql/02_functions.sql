@@ -561,6 +561,170 @@ begin
 end;
 $$;
 
+-- Modification d'une vente (caissière de la boutique, administration).
+-- La vente garde son numéro ; seuls les écarts sont répercutés : mouvements de stock,
+-- facture liée et son encaissement, écritures et caisse.
+create or replace function public.update_sale(p_id text, p jsonb)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  v_role text := app.my_role();
+  v_old public.sales;
+  v_new public.sales;
+  v_inv public.invoices;
+  v_auto public.payments;
+  v_old_total numeric;
+  v_new_total numeric;
+  v_other numeric;
+  v_pay numeric;
+  v_old_cash numeric := 0;
+  v_new_cash numeric := 0;
+  v_money_changed boolean;
+  r record;
+begin
+  select * into v_old from public.sales where id = p_id for update;
+  if not found then raise exception 'Vente introuvable' using errcode = 'P0002'; end if;
+  v_new := v_old;
+  v_new.date := coalesce((p ->> 'date')::date, v_old.date);
+  v_new.boutique_id := coalesce(p ->> 'boutiqueId', v_old.boutique_id);
+  v_new.seller_id := coalesce(p ->> 'sellerId', v_old.seller_id);
+  v_new.client_id := case when p ? 'clientId' then nullif(p ->> 'clientId', '') else v_old.client_id end;
+  v_new.channel := coalesce(p ->> 'channel', v_old.channel);
+  v_new.payment_method := coalesce(p ->> 'paymentMethod', v_old.payment_method);
+  v_new.status := coalesce(p ->> 'status', v_old.status);
+  v_new.items := coalesce(p -> 'items', v_old.items);
+  v_new.notes := case when p ? 'notes' then nullif(p ->> 'notes', '') else v_old.notes end;
+
+  if not (v_role = 'super_admin'
+          or (v_role = 'caissiere' and v_old.boutique_id = app.my_location() and v_new.boutique_id = app.my_location())) then
+    raise exception 'Accès refusé : seules la caissière de la boutique et l''administration modifient une vente' using errcode = '42501';
+  end if;
+  if v_old.status = 'annulee' then
+    raise exception 'Une vente annulée ne peut plus être modifiée' using errcode = 'P0001';
+  end if;
+  if v_new.status = 'annulee' then
+    raise exception 'Utilisez « Annuler la vente » pour annuler une vente' using errcode = 'P0001';
+  end if;
+  if v_new.payment_method = 'credit' and v_new.client_id is null then
+    raise exception 'Une vente à crédit doit être rattachée à un client' using errcode = 'P0001';
+  end if;
+  if jsonb_array_length(coalesce(v_new.items, '[]'::jsonb)) = 0 then
+    raise exception 'La vente ne contient aucune ligne' using errcode = 'P0001';
+  end if;
+  if v_old.invoice_id is not null then
+    select * into v_inv from public.invoices where id = v_old.invoice_id for update;
+  end if;
+  if v_inv.id is not null then
+    if v_inv.status = 'annulee' then
+      raise exception 'La facture % de cette vente est annulée', v_inv.number using errcode = 'P0001';
+    end if;
+    if v_new.client_id is null then
+      raise exception 'Une vente facturée doit rester rattachée à un client' using errcode = 'P0001';
+    end if;
+    if v_new.status = 'brouillon' then
+      raise exception 'Une vente facturée ne peut pas repasser en brouillon' using errcode = 'P0001';
+    end if;
+  end if;
+
+  -- Stock : un mouvement par écart (produit, boutique) entre l'ancienne et la nouvelle vente
+  for r in
+    select x.pid, x.loc, sum(x.q)::integer d from (
+      select i ->> 'productId' pid, v_old.boutique_id loc, -(i ->> 'quantity')::integer q
+      from jsonb_array_elements(v_old.items) i where v_old.status <> 'brouillon'
+      union all
+      select i ->> 'productId', v_new.boutique_id, (i ->> 'quantity')::integer
+      from jsonb_array_elements(v_new.items) i where v_new.status <> 'brouillon'
+    ) x
+    where coalesce(x.pid, '') <> ''
+    group by x.pid, x.loc having sum(x.q) <> 0
+    order by sum(x.q) -- retours en stock d'abord
+  loop
+    if r.d > 0 then
+      insert into public.stock_movements (product_id, type, quantity, from_location_id, reason, reference, user_id)
+      values (r.pid, 'sortie', r.d, r.loc, 'Modification de vente', v_old.number, app.my_employee_id());
+    else
+      insert into public.stock_movements (product_id, type, quantity, to_location_id, reason, reference, user_id)
+      values (r.pid, 'entree', -r.d, r.loc, 'Modification de vente', v_old.number, app.my_employee_id());
+    end if;
+  end loop;
+
+  update public.sales set
+    date = v_new.date, boutique_id = v_new.boutique_id, seller_id = v_new.seller_id, client_id = v_new.client_id,
+    channel = v_new.channel, payment_method = v_new.payment_method, status = v_new.status, items = v_new.items, notes = v_new.notes
+  where id = p_id
+  returning * into v_new;
+
+  select total into v_old_total from app.doc_totals(v_old.items);
+  select total into v_new_total from app.doc_totals(v_new.items);
+
+  if v_inv.id is not null then
+    -- Vente facturée : la facture suit la vente ; l'encaissement automatique (référence = n° de vente) est recalculé
+    select * into v_auto from public.payments where invoice_id = v_inv.id and reference = v_old.number order by date limit 1;
+    select coalesce(sum(amount), 0) into v_other from public.payments where invoice_id = v_inv.id and id is distinct from v_auto.id;
+    if v_other > v_new_total then
+      raise exception 'Le nouveau total (% FCFA) est inférieur aux règlements déjà reçus sur la facture % (% FCFA)',
+        app.fmt_amount(v_new_total), v_inv.number, app.fmt_amount(v_other) using errcode = 'P0001';
+    end if;
+    v_money_changed := v_new_total <> v_old_total or v_new.payment_method <> v_old.payment_method
+                       or v_new.boutique_id <> v_old.boutique_id or v_new.date <> v_old.date;
+    update public.invoices set
+      client_id = v_new.client_id, boutique_id = v_new.boutique_id, date = v_new.date,
+      due_date = case when due_date = v_inv.date then v_new.date else greatest(due_date, v_new.date) end,
+      items = v_new.items
+    where id = v_inv.id;
+    if v_money_changed then
+      delete from public.journal_entries where journal = 'VE' and reference = v_inv.number;
+      perform app.add_journal(v_new.date, 'VE', 'Facture ' || v_inv.number, v_inv.number, jsonb_build_array(
+        jsonb_build_object('account', '411', 'label', 'Client — ' || v_inv.number, 'debit', v_new_total, 'credit', 0),
+        jsonb_build_object('account', '701', 'label', 'Ventes de marchandises', 'debit', 0, 'credit', v_new_total)));
+      if v_auto.id is not null then
+        -- Les espèces de l'ancien encaissement sortent de la caisse ; le nouvel encaissement les réinscrit
+        if v_auto.method = 'especes' then
+          insert into public.cash_movements (number, location_id, direction, kind, amount, label, reference, sale_id)
+          values ('', v_old.boutique_id, 'sortie', 'annulation', v_auto.amount, 'Modification vente ' || v_old.number || ' — reprise de l''encaissement', v_old.number, v_old.id);
+        end if;
+        delete from public.journal_entries where label = 'Règlement ' || v_inv.number and reference = v_old.number;
+        delete from public.payments where id = v_auto.id;
+      end if;
+      v_pay := case when v_new.payment_method = 'credit' then 0 else v_new_total - v_other end;
+      update public.invoices set amount_paid = v_other,
+        status = case when v_other > 0 and v_other >= v_new_total then 'payee' when v_other > 0 then 'partielle' else 'emise' end
+      where id = v_inv.id;
+      if v_pay > 0 then
+        insert into public.payments (invoice_id, date, amount, method, reference)
+        values (v_inv.id, v_new.date, v_pay, v_new.payment_method, v_new.number);
+      end if;
+    end if;
+  else
+    -- Vente comptoir : écriture de vente remplacée, seul l'écart d'espèces passe en caisse
+    delete from public.journal_entries where reference = v_old.number and label = 'Vente ' || v_old.number;
+    if v_old.status <> 'brouillon' and v_old.payment_method = 'especes' then v_old_cash := v_old_total; end if;
+    if v_new.status <> 'brouillon' and v_new.payment_method <> 'credit' then
+      perform app.add_journal(v_new.date, case when v_new.payment_method = 'especes' then 'CA' else 'BQ' end,
+        'Vente ' || v_new.number, v_new.number, jsonb_build_array(
+          jsonb_build_object('account', app.treasury_account(v_new.payment_method), 'label', 'Vente comptoir', 'debit', v_new_total, 'credit', 0),
+          jsonb_build_object('account', '701', 'label', 'Ventes de marchandises', 'debit', 0, 'credit', v_new_total)));
+      if v_new.payment_method = 'especes' then v_new_cash := v_new_total; end if;
+    end if;
+    for r in
+      select x.loc, sum(x.amt) d from (values (v_old.boutique_id, -v_old_cash), (v_new.boutique_id, v_new_cash)) x(loc, amt)
+      group by x.loc having sum(x.amt) <> 0
+    loop
+      if r.d > 0 then
+        insert into public.cash_movements (number, date, location_id, direction, kind, amount, label, reference, client_name, sale_id)
+        values ('', v_new.date, r.loc, 'entree', 'vente', r.d, 'Modification vente ' || v_new.number || ' — complément', v_new.number,
+                coalesce((select c.name from public.clients c where c.id = v_new.client_id), 'Client comptoir'), v_new.id);
+      else
+        insert into public.cash_movements (number, location_id, direction, kind, amount, label, reference, sale_id)
+        values ('', r.loc, 'sortie', 'annulation', -r.d, 'Modification vente ' || v_new.number || ' — remboursement', v_new.number, v_new.id);
+      end if;
+    end loop;
+  end if;
+
+  perform app.log('Modification', 'Ventes', 'Vente ' || v_new.number);
+  return to_jsonb(v_new);
+end;
+$$;
+
 -- Proforma acceptée → facture
 create or replace function public.convert_quote_to_invoice(p_quote_id text)
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -1214,12 +1378,12 @@ revoke all on all functions in schema app from public, anon, authenticated;
 grant usage on schema app to authenticated;
 grant execute on function app.my_employee_id(), app.my_role(), app.my_location(), app.is_admin() to authenticated;
 
-revoke all on function public.employee_directory(), public.create_sale(jsonb, boolean), public.cancel_sale(text),
+revoke all on function public.employee_directory(), public.create_sale(jsonb, boolean), public.cancel_sale(text), public.update_sale(text, jsonb),
   public.convert_quote_to_invoice(text), public.convert_prospect(text), public.complete_followup(text, text, date, text),
   public.generate_followups(), public.generate_payslips(text), public.mark_notifications_read(text[]), public.nav_counters(), public.cash_expense(jsonb),
   public.create_inventory(jsonb), public.save_inventory_counts(text, jsonb), public.validate_inventory(text), public.cancel_inventory(text),
   public.set_product_stock(text, jsonb), public.update_invoice(text, jsonb), public.delete_invoice(text) from public, anon;
-grant execute on function public.employee_directory(), public.create_sale(jsonb, boolean), public.cancel_sale(text),
+grant execute on function public.employee_directory(), public.create_sale(jsonb, boolean), public.cancel_sale(text), public.update_sale(text, jsonb),
   public.convert_quote_to_invoice(text), public.convert_prospect(text), public.complete_followup(text, text, date, text),
   public.generate_followups(), public.generate_payslips(text), public.mark_notifications_read(text[]), public.nav_counters(), public.cash_expense(jsonb),
   public.create_inventory(jsonb), public.save_inventory_counts(text, jsonb), public.validate_inventory(text), public.cancel_inventory(text),

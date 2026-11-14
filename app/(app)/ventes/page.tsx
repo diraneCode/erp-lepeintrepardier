@@ -7,6 +7,7 @@ import {
   LuCircleDollarSign,
   LuEye,
   LuFileDown,
+  LuPencil,
   LuPlus,
   LuShoppingBag,
   LuShoppingCart,
@@ -53,8 +54,12 @@ export default function SalesPage() {
   const updateSale = useStore((s) => s.update)
   const { clientName, clientById, shopName, employeeName, employeeOptions, shopOptions, productById, clientOptions } = useLookups(["clientName", "clientById", "shopName", "employeeName", "employeeOptions", "shopOptions", "productById", "clientOptions"])
 
-  const canInvoice = !!useAccess().access("facturation")?.write
+  const { access, role } = useAccess()
+  const canInvoice = !!access("facturation")?.write
+  // Modification d'une vente : caissière (sa boutique) et administration
+  const canEditSale = acc.write && (role === "caissiere" || role === "super_admin")
   const [formOpen, setFormOpen] = useTransientState(false)
+  const [editing, setEditing] = useTransientState<Sale | undefined>(undefined)
   const [viewing, setViewing] = useTransientState<Row | null>(null)
   const [toCancel, setToCancel] = useTransientState<Row | null>(null)
   const [toDelete, setToDelete] = useTransientState<string[] | null>(null)
@@ -249,6 +254,7 @@ export default function SalesPage() {
                 <RowActions
                   actions={[
                     { label: "Voir le détail", icon: LuEye, onSelect: () => setViewing(s) },
+                    { label: "Modifier", icon: LuPencil, onSelect: () => { setEditing(s); setFormOpen(true) }, hidden: s.status === "annulee" || !canEditSale },
                     { label: "Ticket PDF", icon: LuFileDown, onSelect: () => downloadTicket(s) },
                     { label: "Générer la facture", icon: LuReceipt, onSelect: () => invoiceSale(s), hidden: !s.clientId || !!s.invoiceId || s.status === "annulee" || !acc.write || !canInvoice },
                     { label: "Annuler la vente", icon: LuBan, destructive: true, separatorBefore: true, onSelect: () => setToCancel(s), hidden: s.status === "annulee" || !acc.write },
@@ -260,7 +266,7 @@ export default function SalesPage() {
         </Card>
       </div>
 
-      <SaleFormDialog open={formOpen} onOpenChange={setFormOpen} />
+      <SaleFormDialog open={formOpen} onOpenChange={(o) => { setFormOpen(o); if (!o) setEditing(undefined) }} sale={editing} />
 
       <DetailSheet
         open={!!viewing}
@@ -272,6 +278,11 @@ export default function SalesPage() {
         footer={
           viewing && (
             <>
+              {viewing.status !== "annulee" && canEditSale && (
+                <Button variant="outline" onClick={() => { const v = viewing; setViewing(null); setEditing(v); setFormOpen(true) }}>
+                  <LuPencil /> Modifier
+                </Button>
+              )}
               {viewing.status !== "annulee" && acc.write && (
                 <Button variant="outline" onClick={() => setToCancel(viewing)}>
                   <LuBan /> Annuler

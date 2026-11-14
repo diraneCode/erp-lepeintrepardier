@@ -48,12 +48,15 @@ export function LineItemsEditor<T extends FieldValues>({
   control,
   setValue: setFormValue,
   locationId,
+  stockCredit,
   error,
 }: {
   control: Control<T>
   setValue: UseFormSetValue<T>
   /** Emplacement de stock à contrôler (boutique de vente) */
   locationId?: string
+  /** Quantités déjà prélevées par le document modifié (rendues au stock disponible) */
+  stockCredit?: Record<string, number>
   error?: string
 }) {
   const ctrl = control as unknown as Control<ItemsForm>
@@ -65,7 +68,7 @@ export function LineItemsEditor<T extends FieldValues>({
   const totals = documentTotals(items.filter((i) => Number.isFinite(i.quantity) && Number.isFinite(i.unitPrice)).map((i) => ({ ...i, discount: Number.isFinite(i.discount) ? i.discount : 0 })))
 
   const stockOf = (productId: string) =>
-    locationId ? stockLevels.find((l) => l.productId === productId && l.locationId === locationId)?.quantity ?? 0 : undefined
+    locationId ? (stockLevels.find((l) => l.productId === productId && l.locationId === locationId)?.quantity ?? 0) + (stockCredit?.[productId] ?? 0) : undefined
 
   const num = (v: string) => (v === "" ? Number.NaN : Number(v))
 

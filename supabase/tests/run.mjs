@@ -213,6 +213,53 @@ await as("admin", async () => {
   const [je] = await q(`select lines from public.journal_entries where reference = $1`, [inv.number])
   check("TVA : facture comptabilisée sans TVA (411 / 701, total après remise)", je.lines.length === 2 && je.lines[0].debit === 18000 && !je.lines.some((l) => l.account === "4431"), JSON.stringify(je.lines))
 })
+// ------------------------------------------------------------------ Modification d'une vente
+await as("cais", async () => {
+  const stock = async (pid) => (await q(`select quantity from public.stock_levels where product_id = $1 and location_id = 's1'`, [pid]))[0].quantity
+  const cash = async () => Number((await q(`select coalesce(sum(case when direction='entree' then amount else -amount end),0) b from public.cash_movements where location_id='s1'`))[0].b)
+  const it = (pid, qty, price) => [{ productId: pid, description: "Article", quantity: qty, unitPrice: price, discount: 0 }]
+  const base = { boutique_id: "s1", seller_id: "e2", date: "2026-10-25", payment_method: "especes", status: "livree", channel: "boutique" }
+  const upd = (id, patch) => q(`select public.update_sale($1, $2::jsonb)`, [id, JSON.stringify(patch)])
+
+  // Vente comptoir en espèces
+  const s0 = await stock("p1"), c0 = await cash()
+  const [{ s }] = await q(`select public.create_sale($1::jsonb, false) as s`, [JSON.stringify({ ...base, items: it("p1", 1, 38500) })])
+  await upd(s.id, { items: it("p1", 3, 38500), notes: "Client revenu chercher 2 seaux" })
+  check("vente modifiée : seul l'écart sort du stock", (await stock("p1")) === s0 - 3, String((await stock("p1")) - s0))
+  check("vente modifiée : complément d'espèces en caisse", (await cash()) === c0 + 3 * 38500, String((await cash()) - c0))
+  await db.exec("reset role")
+  const je = await q(`select lines from public.journal_entries where label = $1`, [`Vente ${s.number}`])
+  await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${U.cais}', false);`)
+  check("vente modifiée : une seule écriture, au nouveau total", je.length === 1 && je[0].lines[0].debit === 115500, JSON.stringify(je))
+  const [m] = await q(`select number, notes from public.sales where id = $1`, [s.id])
+  check("vente modifiée : même numéro, notes enregistrées", m.number === s.number && m.notes === "Client revenu chercher 2 seaux", JSON.stringify(m))
+  await upd(s.id, { paymentMethod: "mobile_money" })
+  check("vente passée en mobile money : espèces rendues par la caisse", (await cash()) === c0, String((await cash()) - c0))
+  check("vente : stock insuffisant refusé à la modification", (await fails(`select public.update_sale($1, $2::jsonb)`, [s.id, JSON.stringify({ items: it("p1", 999, 1) })]))?.includes("Stock insuffisant"))
+  check("vente : crédit sans client refusé", !!(await fails(`select public.update_sale($1, $2::jsonb)`, [s.id, JSON.stringify({ paymentMethod: "credit" })])))
+  check("vente : autre boutique refusée (caissière)", !!(await fails(`select public.update_sale($1, $2::jsonb)`, [s.id, JSON.stringify({ boutiqueId: "s2" })])))
+
+  // Vente facturée et payée en espèces
+  const c1 = await cash()
+  const [{ s: f }] = await q(`select public.create_sale($1::jsonb, true) as s`, [JSON.stringify({ ...base, client_id: "cl1", items: it("p2", 1, 17800) })])
+  await upd(f.id, { items: it("p2", 2, 17800) })
+  const [inv] = await q(`select number, status, amount_paid::int paid, items from public.invoices where sale_id = $1`, [f.id])
+  check("vente facturée modifiée : facture alignée et soldée", inv.status === "payee" && inv.paid === 35600 && inv.items[0].quantity === 2, JSON.stringify(inv))
+  check("vente facturée modifiée : caisse au nouveau montant", (await cash()) === c1 + 35600, String((await cash()) - c1))
+  await db.exec("reset role")
+  const ve = await q(`select 1 from public.journal_entries where journal = 'VE' and reference = $1`, [inv.number])
+  const reg = await q(`select 1 from public.journal_entries where label = $1`, [`Règlement ${inv.number}`])
+  await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${U.cais}', false);`)
+  check("vente facturée modifiée : une écriture de vente et un règlement", ve.length === 1 && reg.length === 1, `${ve.length}/${reg.length}`)
+  check("vente facturée : client obligatoire", !!(await fails(`select public.update_sale($1, $2::jsonb)`, [f.id, JSON.stringify({ clientId: "" })])))
+  await q(`select public.cancel_sale($1)`, [s.id])
+  check("vente annulée : plus modifiable", !!(await fails(`select public.update_sale($1, '{}'::jsonb)`, [s.id])))
+})
+await as("com", async () => {
+  const [{ v }] = await q(`select public.create_sale($1::jsonb, false) as v`, [JSON.stringify({ boutique_id: "s2", seller_id: "e3", date: "2026-10-26", payment_method: "mobile_money", status: "livree", channel: "boutique", items: JSON.parse(line(1000)) })])
+  check("vente : commercial ne peut pas modifier (même la sienne)", !!(await fails(`select public.update_sale($1, '{"notes":"x"}'::jsonb)`, [v.id])))
+})
+
 // ------------------------------------------------------------------ Factures et proformas : modification, suppression
 await as("cais", async () => {
   const items = (n) => JSON.stringify([{ productId: "", description: "Prestation", quantity: 1, unitPrice: n, discount: 0 }])
