@@ -310,7 +310,9 @@ await as("admin", async () => {
     { productId: "", custom: true, description: "Traitement", quantity: 2, unitPrice: 50000, discount: 0, section: "traitement" },
     { productId: "", custom: true, description: "Remise fidélité", quantity: 1, unitPrice: -10000, discount: 0, section: "remises", rate: 10, rateBase: "total" },
   ])
-  const [d] = await q(`insert into public.quotes (number, client_id, date, valid_until, items, status, owner_id) values ('', 'cl1', '2026-10-05', '2026-11-04', $1::jsonb, 'accepte', 'e1') returning id`, [items])
+  const advances = JSON.stringify([{ label: "Avance à la commande", date: "2026-10-06", amount: 30000 }, { label: "Avance démarrage", date: "2026-10-20", amount: 20000 }])
+  const [d] = await q(`insert into public.quotes (number, client_id, date, valid_until, items, status, owner_id, advances) values ('', 'cl1', '2026-10-05', '2026-11-04', $1::jsonb, 'accepte', 'e1', $2::jsonb) returning id, advances`, [items, advances])
+  check("proforma : plusieurs avances client enregistrées", d.advances.length === 2 && d.advances[1].amount === 20000, JSON.stringify(d.advances))
   const [{ i }] = await q(`select public.convert_quote_to_invoice($1) as i`, [d.id])
   const [je] = await q(`select lines from public.journal_entries where journal = 'VE' and reference = $1`, [i.number])
   check("proforma remisée → facture au total après remise", je?.lines[0].debit === 90000, JSON.stringify(je))

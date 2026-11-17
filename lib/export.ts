@@ -456,6 +456,10 @@ export interface ProformaDocument {
   /** Total des remises (négatif, 0 sans remise) */
   discount: number
   total: number
+  /** Avances client, déduites pour le net à payer */
+  advances: { label: string; date: string; amount: number }[]
+  advanceTotal: number
+  net: number
   amountInWords: string
   validUntil?: string
   notes?: string
@@ -583,6 +587,8 @@ export async function exportProformaPDF(d: ProformaDocument) {
   const totals: unknown[][] = [
     ...(d.discount !== 0 ? [totalRow("TOTAL DES TRAVAUX", d.subtotal, PF.blue), totalRow("REMISES", d.discount, PF.teal)] : []),
     totalRow("TOTAL PROJET", d.total, PF.green),
+    ...d.advances.map((a) => totalRow(`${a.label.toUpperCase()} (${formatDate(a.date, "dd/MM/yyyy")})`, -a.amount, PF.teal)),
+    ...(d.advances.length ? [totalRow("NET À PAYER", d.net, PF.blue)] : []),
   ]
   autoTable(doc, {
     startY: y,

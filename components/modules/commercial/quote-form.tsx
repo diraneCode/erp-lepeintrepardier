@@ -28,6 +28,12 @@ const surfaceSchema = z.object({
   commercialName: z.string(),
 })
 
+const advanceSchema = z.object({
+  label: z.string().trim().min(2, "Libellé requis"),
+  date: z.string().min(1, "Date requise"),
+  amount: z.number({ error: "Montant requis" }).positive("Doit être positif"),
+})
+
 const schema = z
   .object({
     clientId: z.string().min(1, "Client requis"),
@@ -40,10 +46,15 @@ const schema = z
     issuedIn: z.string().trim().min(2, "Ville requise"),
     surfaces: z.array(surfaceSchema),
     items: lineItemsSchema,
+    advances: z.array(advanceSchema),
     notes: z.string().optional(),
   })
   .refine((v) => v.validUntil >= v.date, { path: ["validUntil"], message: "Doit être postérieure à la date de la proforma" })
   .refine((v) => documentTotals(v.items.map((i) => ({ ...i, discount: 0 }))).total >= 0, { path: ["items"], message: "Les remises dépassent le total des travaux" })
+  .refine((v) => v.advances.reduce((s, a) => s + a.amount, 0) <= documentTotals(v.items.map((i) => ({ ...i, discount: 0 }))).total, {
+    path: ["advances"],
+    message: "Les avances dépassent le total du projet",
+  })
 type FormValues = z.infer<typeof schema>
 
 const defaults = (q?: Quote, ownerId = "", clientId = ""): FormValues => ({
@@ -58,6 +69,7 @@ const defaults = (q?: Quote, ownerId = "", clientId = ""): FormValues => ({
   surfaces: q?.surfaces ?? [{ designation: "", quantity: Number.NaN, unit: "m²", treatment: "", commercialName: "" }],
   // Les anciennes lignes sans rubrique sont rangées dans « Traitement »
   items: q?.items.map((i) => ({ ...i, section: i.section ?? "traitement", custom: i.custom ?? !i.productId })) ?? [],
+  advances: q?.advances ?? [],
   notes: q?.notes ?? "",
 })
 
@@ -99,7 +111,8 @@ function QuoteFormDialogContent({
     onOpenChange(false)
   })
 
-  const itemsError = form.formState.errors.items?.root?.message ?? form.formState.errors.items?.message
+  const itemsError =
+    form.formState.errors.items?.root?.message ?? form.formState.errors.items?.message ?? form.formState.errors.advances?.root?.message ?? form.formState.errors.advances?.message
 
   return (
     <FormDialog

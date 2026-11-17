@@ -158,6 +158,15 @@ export interface Quote {
   /** Ville d'émission (« Douala, le … ») */
   issuedIn?: string
   surfaces?: SurfaceRow[]
+  /** Avances versées par le client (déduites du total pour le net à payer) */
+  advances?: Advance[]
+}
+
+/** Proforma : avance client */
+export interface Advance {
+  label: string
+  date: string
+  amount: number
 }
 
 /* ---------- Ventes & facturation ---------- */

@@ -195,8 +195,11 @@ create table if not exists public.quotes (
   project text,
   site text,
   issued_in text,
-  surfaces jsonb
+  surfaces jsonb,
+  -- Avances versées par le client : [{ label, date, amount }] (net à payer = total − avances)
+  advances jsonb not null default '[]'::jsonb
 );
+alter table public.quotes add column if not exists advances jsonb not null default '[]'::jsonb;
 create index if not exists quotes_owner_idx on public.quotes (owner_id);
 create index if not exists quotes_client_idx on public.quotes (client_id);
 

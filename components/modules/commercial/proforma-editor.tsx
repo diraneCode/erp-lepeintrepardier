@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Controller, useFieldArray, useWatch, type Control, type UseFormSetValue } from "react-hook-form"
-import { LuCalculator, LuPackage, LuPenLine, LuPercent, LuPlus, LuTrash2 } from "react-icons/lu"
+import { LuCalculator, LuHandCoins, LuPackage, LuPenLine, LuPercent, LuPlus, LuTrash2 } from "react-icons/lu"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,16 +10,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Combobox } from "@/components/forms/fields"
 import { useLookups } from "@/hooks/use-lookups"
 import { lineSubtotal } from "@/lib/calc"
-import { formatMoney } from "@/lib/format"
+import { formatMoney, toISODate } from "@/lib/format"
 import { productUnit } from "@/lib/labels"
 import { effectivePrice } from "@/lib/products"
-import { RATE_BASE_LABEL, SECTION_LABEL, SECTIONS, amountInWords, computedQuantity, discountFromRate, sectionOf, sectionTotals } from "@/lib/proforma"
-import type { LineItem, LineSection, SurfaceRow } from "@/lib/types"
+import { RATE_BASE_LABEL, SECTION_LABEL, SECTIONS, advanceTotals, amountInWords, computedQuantity, discountFromRate, sectionOf, sectionTotals } from "@/lib/proforma"
+import type { Advance, LineItem, LineSection, SurfaceRow } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 export interface ProformaForm {
   items: LineItem[]
   surfaces: SurfaceRow[]
+  advances: Advance[]
 }
 
 const num = (v: string) => (v === "" ? Number.NaN : Number(v))
@@ -53,6 +54,8 @@ export function ProformaEditor({
 }) {
   const { fields, append, remove } = useFieldArray({ control, name: "items" })
   const surfacesArray = useFieldArray({ control, name: "surfaces" })
+  const advancesArray = useFieldArray({ control, name: "advances" })
+  const advances = (useWatch({ control, name: "advances" }) ?? []) as Advance[]
   const watchedItems = useWatch({ control, name: "items" }) as LineItem[] | undefined
   const items = React.useMemo(() => watchedItems ?? [], [watchedItems])
   const surfaces = (useWatch({ control, name: "surfaces" }) ?? []) as SurfaceRow[]
@@ -76,6 +79,7 @@ export function ProformaEditor({
     discount: 0,
   }))
   const totals = sectionTotals(safe)
+  const paid = advanceTotals(totals.total, advances)
 
   // Remise en pourcentage : montant recalculé dès que la base change
   const { traitement, main_oeuvre, accessoires } = totals
@@ -334,6 +338,47 @@ export function ProformaEditor({
         </Button>
       </div>
 
+      {/* Avances client : déduites du total pour le net à payer */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between rounded-md bg-success px-3 py-1.5 text-xs font-semibold tracking-wide text-success-foreground uppercase">
+          <span>Avances client</span>
+          <span className="tabular">{formatMoney(paid.advances)}</span>
+        </div>
+        {advancesArray.fields.length > 0 && (
+          <div className="hidden grid-cols-[minmax(0,1fr)_150px_130px_32px] gap-2 px-1 text-xs font-medium text-muted-foreground md:grid">
+            <span>Libellé</span>
+            <span>Date</span>
+            <span className="text-right">Montant</span>
+            <span />
+          </div>
+        )}
+        {advancesArray.fields.map((f, i) => (
+          <div key={f.id} className="grid grid-cols-2 items-start gap-2 rounded-lg border p-3 md:grid-cols-[minmax(0,1fr)_150px_130px_32px] md:border-0 md:p-0">
+            <Controller control={control} name={`advances.${i}.label`} render={({ field, fieldState }) => <Input {...field} aria-label="Libellé" placeholder="Ex : Avance à la commande" aria-invalid={fieldState.invalid} className="col-span-2 md:col-span-1" />} />
+            <Controller control={control} name={`advances.${i}.date`} render={({ field, fieldState }) => <Input type="date" {...field} aria-label="Date de l'avance" aria-invalid={fieldState.invalid} />} />
+            <Controller
+              control={control}
+              name={`advances.${i}.amount`}
+              render={({ field, fieldState }) => (
+                <Input type="number" min={0} aria-label="Montant de l'avance" placeholder="Montant" className="text-right tabular" aria-invalid={fieldState.invalid} value={val(field.value)} onChange={(e) => field.onChange(num(e.target.value))} />
+              )}
+            />
+            <Button type="button" variant="ghost" size="icon" className="justify-self-end text-muted-foreground hover:text-destructive" onClick={() => advancesArray.remove(i)} aria-label="Supprimer l'avance">
+              <LuTrash2 />
+            </Button>
+          </div>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="self-start"
+          onClick={() => advancesArray.append({ label: "Avance client", date: toISODate(new Date()), amount: Number.NaN })}
+        >
+          <LuHandCoins /> Ajouter une avance
+        </Button>
+      </div>
+
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="flex flex-col gap-3 sm:items-end">
@@ -354,6 +399,14 @@ export function ProformaEditor({
           )}
           <dt className="border-t pt-1.5 font-semibold">Total projet</dt>
           <dd className="border-t pt-1.5 text-right font-semibold tabular">{formatMoney(totals.total)}</dd>
+          {paid.advances > 0 && (
+            <>
+              <dt className="text-muted-foreground">Avances client</dt>
+              <dd className="text-right tabular">{formatMoney(-paid.advances)}</dd>
+              <dt className="border-t pt-1.5 font-semibold">Net à payer</dt>
+              <dd className="border-t pt-1.5 text-right font-semibold tabular">{formatMoney(paid.net)}</dd>
+            </>
+          )}
         </dl>
         <p className="text-xs text-muted-foreground italic sm:max-w-md sm:text-right">
           Arrêté la présente facture proforma à la somme de <span className="font-medium text-foreground not-italic">{amountInWords(totals.total)}</span>

@@ -40,6 +40,12 @@ export function sectionTotals(items: LineItem[]) {
   return { ...totals, subtotal, total: t.total }
 }
 
+/** Total des avances et net à payer (jamais négatif). */
+export function advanceTotals(total: number, advances: { amount: number }[] = []) {
+  const paid = Math.round(advances.reduce((s, a) => s + (Number.isFinite(a.amount) ? a.amount : 0), 0))
+  return { advances: paid, net: Math.max(0, total - paid) }
+}
+
 /** Montant (positif) d'une remise en pourcentage, calculé sur sa base. */
 export function discountFromRate(rate: number, base: "total" | WorkSection | undefined, totals: Record<WorkSection, number>) {
   const amount = base && base !== "total" ? totals[base] : SECTIONS.reduce((s, k) => s + totals[k], 0)

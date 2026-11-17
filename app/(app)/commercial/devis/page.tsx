@@ -121,7 +121,7 @@ export default function QuotesPage() {
 
   const duplicate = async (q: Quote) => {
     const number = nextProformaNumber(useStore.getState().quotes)
-    if (!(await add("quotes", { ...q, id: uid("d"), number, status: "brouillon", date: today, validUntil: toISODate(addDays(new Date(), 30)), invoiceId: undefined }))) return
+    if (!(await add("quotes", { ...q, id: uid("d"), number, status: "brouillon", date: today, validUntil: toISODate(addDays(new Date(), 30)), invoiceId: undefined, advances: [] }))) return
     toast.success("Devis dupliqué", { description: number })
   }
 

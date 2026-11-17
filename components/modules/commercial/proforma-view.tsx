@@ -6,13 +6,14 @@ import { lineSubtotal } from "@/lib/calc"
 import type { ProformaDocument } from "@/lib/export"
 import { formatDate, formatMoney, formatNumber } from "@/lib/format"
 import { productUnit } from "@/lib/labels"
-import { SECTION_LABEL, SECTIONS, amountInWords, sectionOf, sectionTotals } from "@/lib/proforma"
+import { SECTION_LABEL, SECTIONS, advanceTotals, amountInWords, sectionOf, sectionTotals } from "@/lib/proforma"
 import type { Client, Product, Quote } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 /** Construit le document proforma (PDF) à partir d'un devis. */
 export function toProformaDocument(q: Quote, client: Client | undefined, productById: Map<string, Product>): ProformaDocument {
   const t = sectionTotals(q.items)
+  const paid = advanceTotals(t.total, q.advances)
   return {
     number: q.number,
     date: q.date,
@@ -46,6 +47,9 @@ export function toProformaDocument(q: Quote, client: Client | undefined, product
     subtotal: t.subtotal,
     discount: t.remises,
     total: t.total,
+    advances: (q.advances ?? []).map((a) => ({ label: a.label, date: a.date, amount: a.amount })),
+    advanceTotal: paid.advances,
+    net: paid.net,
     amountInWords: amountInWords(t.total),
     validUntil: q.validUntil,
     notes: q.notes,
@@ -165,6 +169,20 @@ export function ProformaView({ doc }: { doc: ProformaDocument }) {
           <span>TOTAL PROJET</span>
           <span className="tabular">{formatMoney(doc.total)}</span>
         </div>
+        {doc.advances.length > 0 && (
+          <>
+            {doc.advances.map((a, i) => (
+              <div key={i} className="flex w-full justify-between gap-4 px-3 sm:w-72">
+                <span>{a.label} <span className="text-xs text-muted-foreground">({formatDate(a.date)})</span></span>
+                <span className="tabular">{formatMoney(-a.amount)}</span>
+              </div>
+            ))}
+            <div className="flex w-full justify-between gap-4 rounded-md bg-primary px-3 py-2 font-semibold text-primary-foreground sm:w-72">
+              <span>NET À PAYER</span>
+              <span className="tabular">{formatMoney(doc.net)}</span>
+            </div>
+          </>
+        )}
       </div>
       <p className="text-xs font-semibold italic">Arrêté la présente facture proforma à la somme de {doc.amountInWords}</p>
     </div>
