@@ -3,6 +3,7 @@
 import { format } from "date-fns"
 
 import { formatDate, formatMoney, formatNumber } from "@/lib/format"
+import type { LineSection } from "@/lib/types"
 
 export type ExportFormat = "pdf" | "excel" | "csv"
 export type ExportValue = string | number | null | undefined
@@ -444,12 +445,16 @@ export interface ProformaDocument {
   client: { name: string; address?: string; phone?: string }
   surfaces: { designation: string; quantity: number; unit: string; treatment: string; commercialName: string }[]
   sections: {
-    key: "traitement" | "main_oeuvre" | "accessoires"
+    key: LineSection
     title: string
     totalLabel: string
-    lines: { description: string; specification?: string; packaging?: string; coverage?: number; surface?: number; quantity: number; unitPrice: number; amount: number }[]
+    lines: { description: string; specification?: string; packaging?: string; coverage?: number; surface?: number; quantity: number; unitPrice: number; rate?: number; amount: number }[]
     total: number
   }[]
+  /** Travaux avant remises */
+  subtotal: number
+  /** Total des remises (négatif, 0 sans remise) */
+  discount: number
   total: number
   amountInWords: string
   validUntil?: string
@@ -553,9 +558,10 @@ export async function exportProformaPDF(d: ProformaDocument) {
     for (const l of section.lines) {
       if (section.key === "traitement")
         body.push([l.description, l.specification ?? "", l.packaging ?? "", n(l.coverage), n(l.surface), n(l.quantity), n(l.unitPrice), n(l.amount)])
+      else if (section.key === "remises") body.push([{ content: l.description, colSpan: 5 }, l.rate !== undefined ? `${n(l.rate)} %` : "", "", n(l.amount)])
       else body.push([{ content: l.description, colSpan: 5 }, n(l.quantity), n(l.unitPrice), n(l.amount)])
     }
-    body.push(totalRow(section.totalLabel.toUpperCase(), section.total, section.key === "accessoires" ? PF.teal : PF.blue))
+    body.push(totalRow(section.totalLabel.toUpperCase(), section.total, section.key === "accessoires" || section.key === "remises" ? PF.teal : PF.blue))
     autoTable(doc, {
       startY: y,
       margin: { left: M, right: M, bottom: 20 },
@@ -574,7 +580,10 @@ export async function exportProformaPDF(d: ProformaDocument) {
   })
 
   // Totaux généraux
-  const totals: unknown[][] = [totalRow("TOTAL PROJET", d.total, PF.green)]
+  const totals: unknown[][] = [
+    ...(d.discount !== 0 ? [totalRow("TOTAL DES TRAVAUX", d.subtotal, PF.blue), totalRow("REMISES", d.discount, PF.teal)] : []),
+    totalRow("TOTAL PROJET", d.total, PF.green),
+  ]
   autoTable(doc, {
     startY: y,
     margin: { left: M, right: M, bottom: 20 },

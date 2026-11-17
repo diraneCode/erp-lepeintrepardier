@@ -21,7 +21,7 @@ export function toProformaDocument(q: Quote, client: Client | undefined, product
     site: q.site ?? client?.city ?? "",
     client: { name: client?.name ?? "Client", address: client?.address, phone: client?.phone },
     surfaces: q.surfaces ?? [],
-    sections: SECTIONS.map((key) => ({
+    sections: [...SECTIONS, "remises" as const].map((key) => ({
       key,
       title: SECTION_LABEL[key].title,
       totalLabel: SECTION_LABEL[key].total,
@@ -38,10 +38,13 @@ export function toProformaDocument(q: Quote, client: Client | undefined, product
             surface: i.surface,
             quantity: i.quantity,
             unitPrice: i.unitPrice,
+            rate: i.rate !== undefined && Number.isFinite(i.rate) ? i.rate : undefined,
             amount: Math.round(lineSubtotal(i)),
           }
         }),
     })).filter((s) => s.lines.length > 0),
+    subtotal: t.subtotal,
+    discount: t.remises,
     total: t.total,
     amountInWords: amountInWords(t.total),
     validUntil: q.validUntil,
@@ -100,7 +103,7 @@ export function ProformaView({ doc }: { doc: ProformaDocument }) {
                 <th colSpan={8} className="bg-primary px-2 py-1.5 text-center font-semibold tracking-wide text-primary-foreground uppercase">{s.title}</th>
               </tr>
               <tr className="bg-muted/50 text-muted-foreground">
-                {(s.key === "traitement" ? ["Produit / service", "Spécificité", "Cond.", "Couv.", "Surface", "Qté", "PU", "Montant"] : ["Désignation", "", "", "", "", "Qté", "PU", "Montant"]).map((h, i) => (
+                {(s.key === "traitement" ? ["Produit / service", "Spécificité", "Cond.", "Couv.", "Surface", "Qté", "PU", "Montant"] : s.key === "remises" ? ["Libellé", "", "", "", "", "Taux", "", "Montant"] : ["Désignation", "", "", "", "", "Qté", "PU", "Montant"]).map((h, i) => (
                   <th key={i} className={cn("px-2 py-1.5 font-medium", i >= 5 ? "text-right" : "text-left")}>{h}</th>
                 ))}
               </tr>
@@ -119,8 +122,17 @@ export function ProformaView({ doc }: { doc: ProformaDocument }) {
                   ) : (
                     <td colSpan={5} className="px-2 py-1.5 font-medium">{l.description}</td>
                   )}
-                  <td className="px-2 py-1.5 text-right tabular">{n(l.quantity)}</td>
-                  <td className="px-2 py-1.5 text-right tabular">{n(l.unitPrice)}</td>
+                  {s.key === "remises" ? (
+                    <>
+                      <td className="px-2 py-1.5 text-right tabular">{l.rate !== undefined ? `${formatNumber(l.rate)} %` : ""}</td>
+                      <td />
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-2 py-1.5 text-right tabular">{n(l.quantity)}</td>
+                      <td className="px-2 py-1.5 text-right tabular">{n(l.unitPrice)}</td>
+                    </>
+                  )}
                   <td className="px-2 py-1.5 text-right font-medium tabular">{n(l.amount)}</td>
                 </tr>
               ))}
@@ -137,6 +149,18 @@ export function ProformaView({ doc }: { doc: ProformaDocument }) {
       ))}
 
       <div className="flex flex-col items-end gap-1.5">
+        {doc.discount !== 0 && (
+          <>
+            <div className="flex w-full justify-between gap-4 px-3 sm:w-72">
+              <span>Total des travaux</span>
+              <span className="tabular">{formatMoney(doc.subtotal)}</span>
+            </div>
+            <div className="flex w-full justify-between gap-4 px-3 sm:w-72">
+              <span>Remises</span>
+              <span className="tabular">{formatMoney(doc.discount)}</span>
+            </div>
+          </>
+        )}
         <div className="flex w-full justify-between gap-4 rounded-md bg-success px-3 py-2 font-semibold text-success-foreground sm:w-72">
           <span>TOTAL PROJET</span>
           <span className="tabular">{formatMoney(doc.total)}</span>

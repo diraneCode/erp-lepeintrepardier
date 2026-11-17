@@ -2,17 +2,18 @@
 
 import * as React from "react"
 import { Controller, useFieldArray, useWatch, type Control, type UseFormSetValue } from "react-hook-form"
-import { LuCalculator, LuPackage, LuPenLine, LuPlus, LuTrash2 } from "react-icons/lu"
+import { LuCalculator, LuPackage, LuPenLine, LuPercent, LuPlus, LuTrash2 } from "react-icons/lu"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Combobox } from "@/components/forms/fields"
 import { useLookups } from "@/hooks/use-lookups"
 import { lineSubtotal } from "@/lib/calc"
 import { formatMoney } from "@/lib/format"
 import { productUnit } from "@/lib/labels"
 import { effectivePrice } from "@/lib/products"
-import { SECTION_LABEL, SECTIONS, amountInWords, computedQuantity, sectionOf, sectionTotals } from "@/lib/proforma"
+import { RATE_BASE_LABEL, SECTION_LABEL, SECTIONS, amountInWords, computedQuantity, discountFromRate, sectionOf, sectionTotals } from "@/lib/proforma"
 import type { LineItem, LineSection, SurfaceRow } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -29,6 +30,7 @@ const GRID: Record<LineSection, string> = {
   traitement: "md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_72px_80px_80px_76px_100px_100px_32px]",
   main_oeuvre: "md:grid-cols-[minmax(0,1fr)_90px_110px_120px_32px]",
   accessoires: "md:grid-cols-[minmax(0,1fr)_90px_110px_120px_32px]",
+  remises: "md:grid-cols-[minmax(0,1fr)_170px_90px_130px_32px]",
 }
 
 function SectionHeader({ section, total }: { section: LineSection; total: number }) {
@@ -75,6 +77,20 @@ export function ProformaEditor({
   }))
   const totals = sectionTotals(safe)
 
+  // Remise en pourcentage : montant recalculé dès que la base change
+  const { traitement, main_oeuvre, accessoires } = totals
+  React.useEffect(() => {
+    items.forEach((it, i) => {
+      if (sectionOf(it) !== "remises" || it.rate === undefined || !Number.isFinite(it.rate)) return
+      const price = -discountFromRate(it.rate, it.rateBase, { traitement, main_oeuvre, accessoires })
+      if (price !== it.unitPrice) setValue(`items.${i}.unitPrice`, price, { shouldValidate: true })
+    })
+  }, [items, traitement, main_oeuvre, accessoires, setValue])
+
+  const addDiscount = () =>
+    append({ productId: "", custom: true, description: "Remise commerciale", quantity: 1, unitPrice: Number.NaN, discount: 0, section: "remises", rateBase: "total" })
+  const discountRows = fields.map((f, idx) => ({ f, idx })).filter(({ idx }) => items[idx] && sectionOf(items[idx]) === "remises")
+
   const addLine = (section: LineSection, custom: boolean) =>
     append({
       productId: "",
@@ -98,7 +114,7 @@ export function ProformaEditor({
     if (!items[i]?.surface && projectSurface) setValue(`items.${i}.surface`, projectSurface)
   }
 
-  const numberCell = (name: `items.${number}.${"quantity" | "unitPrice" | "coverage" | "surface"}`, label: string, opts: { readOnly?: boolean; className?: string } = {}) => (
+  const numberCell = (name: `items.${number}.${"quantity" | "unitPrice" | "coverage" | "surface" | "rate"}`, label: string, opts: { readOnly?: boolean; className?: string } = {}) => (
     <Controller
       control={control}
       name={name}
@@ -254,6 +270,70 @@ export function ProformaEditor({
         )
       })}
 
+      {/* Remises : montant fixe ou pourcentage d'une base */}
+      <div className="flex flex-col gap-2">
+        <SectionHeader section="remises" total={totals.remises} />
+        {discountRows.length > 0 && (
+          <div className={cn("hidden gap-2 px-1 text-xs font-medium text-muted-foreground md:grid", GRID.remises)}>
+            <span>Libellé</span>
+            <span>Base</span>
+            <span className="text-right">Taux %</span>
+            <span className="text-right">Montant</span>
+            <span />
+          </div>
+        )}
+        {discountRows.map(({ f, idx }) => {
+          const it = items[idx]
+          const byRate = it.rate !== undefined && Number.isFinite(it.rate)
+          return (
+            <div key={f.id} className={cn("grid grid-cols-2 items-start gap-2 rounded-lg border p-3 md:border-0 md:p-0", GRID.remises)}>
+              <div className="col-span-2 md:col-span-1">{textCell(`items.${idx}.description`, "Libellé (ex : remise fidélité)")}</div>
+              <Controller
+                control={control}
+                name={`items.${idx}.rateBase`}
+                render={({ field }) => (
+                  <Select value={field.value ?? "total"} onValueChange={field.onChange} disabled={!byRate}>
+                    <SelectTrigger className="w-full" aria-label="Base de la remise">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(RATE_BASE_LABEL).map(([value, label]) => (
+                        <SelectItem key={value} value={value}>{label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              {numberCell(`items.${idx}.rate`, "%")}
+              {/* Montant saisi en positif, enregistré en négatif ; calculé quand un taux est renseigné */}
+              <Controller
+                control={control}
+                name={`items.${idx}.unitPrice`}
+                render={({ field, fieldState }) => (
+                  <Input
+                    type="number"
+                    min={0}
+                    aria-label="Montant de la remise"
+                    placeholder="Montant"
+                    readOnly={byRate}
+                    aria-invalid={fieldState.invalid}
+                    className={cn("text-right tabular", byRate && "bg-muted/60")}
+                    value={Number.isFinite(field.value) ? -(field.value as number) || "" : ""}
+                    onChange={(e) => field.onChange(e.target.value === "" ? Number.NaN : -Math.abs(Number(e.target.value)))}
+                  />
+                )}
+              />
+              <Button type="button" variant="ghost" size="icon" className="justify-self-end text-muted-foreground hover:text-destructive" onClick={() => remove(idx)} aria-label="Supprimer la remise">
+                <LuTrash2 />
+              </Button>
+            </div>
+          )
+        })}
+        <Button type="button" variant="outline" size="sm" className="self-start" onClick={addDiscount}>
+          <LuPercent /> Ajouter une remise
+        </Button>
+      </div>
+
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="flex flex-col gap-3 sm:items-end">
@@ -264,6 +344,14 @@ export function ProformaEditor({
               <dd className="text-right tabular">{formatMoney(totals[s])}</dd>
             </React.Fragment>
           ))}
+          {totals.remises !== 0 && (
+            <>
+              <dt className="border-t pt-1.5 text-muted-foreground">Total des travaux</dt>
+              <dd className="border-t pt-1.5 text-right tabular">{formatMoney(totals.subtotal)}</dd>
+              <dt className="text-muted-foreground">{SECTION_LABEL.remises.total}</dt>
+              <dd className="text-right text-success tabular">{formatMoney(totals.remises)}</dd>
+            </>
+          )}
           <dt className="border-t pt-1.5 font-semibold">Total projet</dt>
           <dd className="border-t pt-1.5 text-right font-semibold tabular">{formatMoney(totals.total)}</dd>
         </dl>

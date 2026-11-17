@@ -24,14 +24,19 @@ export const lineItemSchema = z
     custom: z.boolean().optional(),
     description: z.string(),
     quantity: z.number({ error: "Quantité requise" }).positive("Quantité > 0"),
-    unitPrice: z.number({ error: "Prix requis" }).min(0, "Prix invalide"),
+    unitPrice: z.number({ error: "Prix requis" }),
     discount: z.number({ error: "Remise requise" }).min(0).max(100, "Max 100 %"),
-    section: z.enum(["traitement", "main_oeuvre", "accessoires"]).optional(),
+    section: z.enum(["traitement", "main_oeuvre", "accessoires", "remises"]).optional(),
     specification: z.string().optional(),
     packaging: z.string().optional(),
     coverage: optionalNumber(),
     surface: optionalNumber(),
+    rate: optionalNumber(z.number().min(0, "Taux invalide").max(100, "Max 100 %")),
+    rateBase: z.enum(["total", "traitement", "main_oeuvre", "accessoires"]).optional(),
   })
+  // Prix positif ; une ligne de remise porte un montant négatif
+  .refine((l) => (l.section === "remises" ? true : l.unitPrice >= 0), { path: ["unitPrice"], message: "Prix invalide" })
+  .refine((l) => (l.section === "remises" ? l.unitPrice < 0 : true), { path: ["unitPrice"], message: "Montant de la remise requis" })
   // Ligne d'article : produit obligatoire. Ligne libre : désignation obligatoire.
   .refine((l) => l.custom || !!l.productId, { path: ["productId"], message: "Choisissez un produit" })
   .refine((l) => !l.custom || l.description.trim().length >= 2, { path: ["description"], message: "Désignation requise" })

@@ -13,6 +13,7 @@ import { FormDialog, FormGrid, FormSection } from "@/components/shared/form-dial
 import { ProformaEditor, type ProformaForm } from "@/components/modules/commercial/proforma-editor"
 import { useCurrentUser, useModuleAccess, useScopedClientOptions } from "@/hooks/use-access"
 import { useLookups } from "@/hooks/use-lookups"
+import { documentTotals } from "@/lib/calc"
 import { quoteStatus, toOptions } from "@/lib/labels"
 import { nextProformaNumber } from "@/lib/proforma"
 import { uid, useStore } from "@/lib/store"
@@ -42,6 +43,7 @@ const schema = z
     notes: z.string().optional(),
   })
   .refine((v) => v.validUntil >= v.date, { path: ["validUntil"], message: "Doit être postérieure à la date de la proforma" })
+  .refine((v) => documentTotals(v.items.map((i) => ({ ...i, discount: 0 }))).total >= 0, { path: ["items"], message: "Les remises dépassent le total des travaux" })
 type FormValues = z.infer<typeof schema>
 
 const defaults = (q?: Quote, ownerId = "", clientId = ""): FormValues => ({

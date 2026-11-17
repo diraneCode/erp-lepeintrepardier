@@ -1,14 +1,23 @@
 import { format } from "date-fns"
 
 import { documentTotals, lineSubtotal } from "@/lib/calc"
-import type { LineItem, LineSection } from "@/lib/types"
+import type { LineItem, LineSection, WorkSection } from "@/lib/types"
 
-export const SECTIONS: LineSection[] = ["traitement", "main_oeuvre", "accessoires"]
+/** Rubriques de travaux, dans l'ordre de la proforma (les remises viennent après) */
+export const SECTIONS: WorkSection[] = ["traitement", "main_oeuvre", "accessoires"]
 
 export const SECTION_LABEL: Record<LineSection, { title: string; total: string }> = {
   traitement: { title: "Traitement", total: "Total traitement" },
   main_oeuvre: { title: "Main d'œuvre", total: "Total main d'œuvre" },
   accessoires: { title: "Accessoires", total: "Total accessoires" },
+  remises: { title: "Remises", total: "Total remises" },
+}
+
+export const RATE_BASE_LABEL: Record<"total" | WorkSection, string> = {
+  total: "Total des travaux",
+  traitement: "Traitement",
+  main_oeuvre: "Main d'œuvre",
+  accessoires: "Accessoires",
 }
 
 export const sectionOf = (i: LineItem): LineSection => i.section ?? "traitement"
@@ -22,11 +31,19 @@ export function computedQuantity(surface?: number, coverage?: number) {
   return Math.max(1, Math.round(surface / coverage))
 }
 
+/** Totaux par rubrique ; `subtotal` = travaux avant remises, `remises` est négatif. */
 export function sectionTotals(items: LineItem[]) {
-  const totals = Object.fromEntries(SECTIONS.map((s) => [s, 0])) as Record<LineSection, number>
+  const totals = Object.fromEntries([...SECTIONS, "remises"].map((s) => [s, 0])) as Record<LineSection, number>
   for (const i of items) totals[sectionOf(i)] += Math.round(lineSubtotal(i))
+  const subtotal = SECTIONS.reduce((s, k) => s + totals[k], 0)
   const t = documentTotals(items)
-  return { ...totals, total: t.total }
+  return { ...totals, subtotal, total: t.total }
+}
+
+/** Montant (positif) d'une remise en pourcentage, calculé sur sa base. */
+export function discountFromRate(rate: number, base: "total" | WorkSection | undefined, totals: Record<WorkSection, number>) {
+  const amount = base && base !== "total" ? totals[base] : SECTIONS.reduce((s, k) => s + totals[k], 0)
+  return Math.round((amount * rate) / 100)
 }
 
 /** Numéro de proforma : NN/AAAA/MM (séquence du mois). */

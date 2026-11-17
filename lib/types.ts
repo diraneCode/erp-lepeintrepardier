@@ -9,7 +9,9 @@ export type ID = string
 
 export type PaymentMethod = "especes" | "mobile_money" | "carte" | "virement" | "cheque" | "credit"
 
-export type LineSection = "traitement" | "main_oeuvre" | "accessoires"
+export type LineSection = "traitement" | "main_oeuvre" | "accessoires" | "remises"
+/** Rubriques de travaux (hors remises) */
+export type WorkSection = Exclude<LineSection, "remises">
 
 export interface LineItem {
   /** Article du catalogue ; chaîne vide pour une ligne libre (service, accessoire non référencé…) */
@@ -31,6 +33,10 @@ export interface LineItem {
   coverage?: number
   /** Proforma : surface à traiter (m²) */
   surface?: number
+  /** Proforma (remise) : taux en %, appliqué à la base choisie */
+  rate?: number
+  /** Proforma (remise) : base du taux, total des travaux ou une rubrique */
+  rateBase?: "total" | WorkSection
 }
 
 /** Évaluation des surfaces à traiter (en-tête de proforma) */

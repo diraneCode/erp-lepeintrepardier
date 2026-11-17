@@ -304,6 +304,17 @@ await as("com2", async () => {
   await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub', '${U.com2}', false);`)
   check("proforma : suppression de celle d'un autre sans effet", before[0].n === 0 && n > 0, String(n))
 })
+// ------------------------------------------------------------------ Proforma avec remise
+await as("admin", async () => {
+  const items = JSON.stringify([
+    { productId: "", custom: true, description: "Traitement", quantity: 2, unitPrice: 50000, discount: 0, section: "traitement" },
+    { productId: "", custom: true, description: "Remise fidélité", quantity: 1, unitPrice: -10000, discount: 0, section: "remises", rate: 10, rateBase: "total" },
+  ])
+  const [d] = await q(`insert into public.quotes (number, client_id, date, valid_until, items, status, owner_id) values ('', 'cl1', '2026-10-05', '2026-11-04', $1::jsonb, 'accepte', 'e1') returning id`, [items])
+  const [{ i }] = await q(`select public.convert_quote_to_invoice($1) as i`, [d.id])
+  const [je] = await q(`select lines from public.journal_entries where journal = 'VE' and reference = $1`, [i.number])
+  check("proforma remisée → facture au total après remise", je?.lines[0].debit === 90000, JSON.stringify(je))
+})
 await as("susp", async () => {
   check("compte suspendu : plus aucun accès", (await q(`select id from public.products`)).length === 0 && (await q(`select id from public.clients`)).length === 0)
 })
