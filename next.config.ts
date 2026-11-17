@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   experimental: {
     agentFeedback: true,
+    agentUpgrade: "security",
     // Pages rendues côté client (session Supabase) : seules les routes qui
     // exportent explicitement `instant` sont validées.
     instantInsights: {

@@ -23,7 +23,7 @@
     "framer-motion": "^14.2.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
-    "next": "16.4.3",
+    "next": "16.4.6",
     "radix-ui": "^1.8.1",
     "react": "19.3.0",
     "react-day-picker": "^10.0.2",
@@ -48,7 +48,7 @@
     "@types/react-dom": "^19",
     "dotenv": "^18.0.8",
     "eslint": "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
